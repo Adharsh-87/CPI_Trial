@@ -1,7 +1,7 @@
 Manifest-Version: 1.0
 Bundle-ManifestVersion: 2
-Bundle-Name: Aggregator_Palette
-Bundle-SymbolicName: Aggregator_Palette; singleton:=true
+Bundle-Name: content2
+Bundle-SymbolicName: content2; singleton:=true
 Bundle-Version: 1.0.0
 SAP-BundleType: IntegrationFlow
 SAP-NodeType: IFLMAP
@@ -28,6 +28,6 @@ Import-Package: com.sap.esb.application.services.cxf.interceptor,com.sap
  el.spi,com.sap.esb.webservice.audit.log,com.sap.esb.camel.endpoint.conf
  igurator.api,com.sap.esb.camel.jdbc.idempotency.reorg,javax.sql,org.apa
  che.camel.processor.idempotent.jdbc,org.osgi.service.blueprint
-Origin-Bundle-Name: Aggregator_Palette
-Origin-Bundle-SymbolicName: Aggregator_Palette
+Origin-Bundle-Name: content2
+Origin-Bundle-SymbolicName: content2
 
