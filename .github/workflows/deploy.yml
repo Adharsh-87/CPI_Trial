@@ -4,9 +4,6 @@ on:
   push:
     branches:
       - CPI-Main
-    paths:
-      - "TestSample/IntegrationFlow/**"
-
 jobs:
   deploy:
     runs-on: ubuntu-latest
