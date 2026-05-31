@@ -18,7 +18,7 @@ jobs:
 
       - name: Deploy CPI artifacts
         env:
-          CPI_HOST: https://3503bcbdtrial.integrationsuite-trial01.cfapps.us10-001.hana.ondemand.com
+          CPI_HOST: https://3503bcbdtrial.it-cpitrial06.cfapps.us10-001.hana.ondemand.com
           CPI_TOKEN_URL: https://3503bcbdtrial.authentication.us10.hana.ondemand.com/oauth/token
           CPI_CLIENT_ID: ${{ secrets.CPI_CLIENT_ID }}
           CPI_CLIENT_SECRET: ${{ secrets.CPI_CLIENT_SECRET }}
