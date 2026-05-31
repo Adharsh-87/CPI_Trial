@@ -3,9 +3,7 @@ name: Deploy CPI Artifact
 on:
   push:
     branches:
-      - main
-    paths:
-      - "cpi-artifacts/**"
+      - CPI-Main
 
 jobs:
   deploy:
