@@ -1,0 +1,29 @@
+name: Deploy CPI Artifact
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "cpi-artifacts/**"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Deploy artifact to SAP CPI
+        env:
+          CPI_HOST: ${{ secrets.CPI_HOST }}
+          CPI_CLIENT_ID: ${{ secrets.CPI_CLIENT_ID }}
+          CPI_CLIENT_SECRET: ${{ secrets.CPI_CLIENT_SECRET }}
+          CPI_TOKEN_URL: ${{ secrets.CPI_TOKEN_URL }}
+        run: |
+          chmod +x deploy-iflow.sh
+          ./deploy-iflow.sh
