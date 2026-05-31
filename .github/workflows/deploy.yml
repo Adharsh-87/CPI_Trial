@@ -1,9 +1,11 @@
-name: Deploy CPI Artifact
+name: Deploy CPI Artifacts
 
 on:
   push:
     branches:
       - CPI-Main
+    paths:
+      - "TestSample/IntegrationFlow/**"
 
 jobs:
   deploy:
@@ -13,10 +15,10 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Install jq
-        run: sudo apt-get update && sudo apt-get install -y jq
+      - name: Install zip and jq
+        run: sudo apt-get update && sudo apt-get install -y zip jq
 
-      - name: Deploy artifact to SAP CPI
+      - name: Deploy CPI artifacts
         env:
           CPI_HOST: ${{ secrets.CPI_HOST }}
           CPI_CLIENT_ID: ${{ secrets.CPI_CLIENT_ID }}
