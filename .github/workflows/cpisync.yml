@@ -1,0 +1,110 @@
+name: Sync SAP CPI Artifacts to Git
+
+on:
+  # Allows you to trigger this workflow manually from the Actions tab
+  workflow_dispatch: 
+
+  # Automate it to run on a schedule (e.g., every day at midnight UTC)
+  schedule:
+    - cron: '0 0 * * *'
+
+# Grant permission to write changes back to the repository
+permissions:
+  contents: write
+
+env:
+  CPI_TMN_HOST: "https://3503bcbdtrial.integrationsuite-trial01.cfapps.us10-001.hana.ondemand.com" # Change to your CPI host
+  PACKAGE_ID: "https://3503bcbdtrial.integrationsuite-trial01.cfapps.us10-001.hana.ondemand.com/shell/design/contentpackage/TestSample"                                             # Change to your CPI Package ID
+  BRANCH_NAME: "CPI-Main"                                                           # Target branch
+
+jobs:
+  sync-artifacts:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Checkout the repository so the runner has access to it
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.BRANCH_NAME }}
+
+      # 2. Fetch OAuth Token and Pull/Unzip Artifacts
+      - name: Fetch and Process CPI Artifacts
+        env:
+          CLIENT_ID: ${{ secrets.CPI_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CPI_CLIENT_SECRET }}
+          AUTH_URL: ${{ secrets.CPI_AUTH_URL }}
+        run: |
+          set -e
+          
+          # Create a temporary working directory
+          TMP_DIR="/tmp/cpi_sync_$(date +%s)"
+          mkdir -p "$TMP_DIR"
+          
+          echo "🔑 Fetching OAuth token from SAP CPI..."
+          TOKEN_RESPONSE=$(curl -s -X POST "$AUTH_URL" \
+            -u "$CLIENT_ID:$CLIENT_SECRET" \
+            -d "grant_type=client_credentials&response_type=token")
+          
+          ACCESS_TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r '.access_token')
+          
+          if [ -z "$ACCESS_TOKEN" ] || [ "$ACCESS_TOKEN" == "null" ]; then
+            echo "❌ Error: Failed to fetch access token."
+            exit 1
+          fi
+          
+          echo "📦 Fetching artifacts list for package: ${{ env.PACKAGE_ID }}..."
+          API_URL="${{ env.CPI_TMN_HOST }}/api/v1/IntegrationPackages('${{ env.PACKAGE_ID }}')/IntegrationDesigntimeArtifacts"
+          
+          ARTIFACTS_JSON=$(curl -s -X GET "$API_URL" \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H "Accept: application/json")
+          
+          ARTIFACT_IDS=$(echo "$ARTIFACTS_JSON" | jq -r '.d.results[].Id')
+          
+          if [ -z "$ARTIFACT_IDS" ]; then
+            echo "⚠️ No artifacts found or package doesn't exist."
+            exit 0
+          fi
+          
+          # Ensure target directory exists in the repo workspace
+          TARGET_DIR="${{ github.workspace }}/${{ env.PACKAGE_ID }}"
+          mkdir -p "$TARGET_DIR"
+          
+          for ARTIFACT_ID in $ARTIFACT_IDS; do
+            echo "📥 Downloading artifact: $ARTIFACT_ID..."
+            DOWNLOAD_URL="${{ env.CPI_TMN_HOST }}/api/v1/IntegrationDesigntimeArtifacts(Id='$ARTIFACT_ID',Version='active')/\$value"
+            
+            curl -s -X GET "$DOWNLOAD_URL" \
+              -H "Authorization: Bearer $ACCESS_TOKEN" \
+              -o "$TMP_DIR/$ARTIFACT_ID.zip"
+            
+            ARTIFACT_GIT_DIR="$TARGET_DIR/$ARTIFACT_ID"
+            rm -rf "$ARTIFACT_GIT_DIR"
+            mkdir -p "$ARTIFACT_GIT_DIR"
+            
+            if [ -f "$TMP_DIR/$ARTIFACT_ID.zip" ]; then
+              unzip -q -o "$TMP_DIR/$ARTIFACT_ID.zip" -d "$ARTIFACT_GIT_DIR"
+              echo "✅ Processed $ARTIFACT_ID"
+            else
+              echo "❌ Failed to download $ARTIFACT_ID"
+            fi
+          done
+          
+          rm -rf "$TMP_DIR"
+
+      # 3. Commit and push any changes back to GitHub
+      - name: Commit and Push Changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Check if there are differences to commit
+          if [[ -n $(git status --porcelain) ]]; then
+            git add "${{ env.PACKAGE_ID }}/"
+            git commit -m "Auto-sync CPI Package: ${{ env.PACKAGE_ID }} (Build ${{ github.run_number }})"
+            echo "📤 Pushing updates to GitHub..."
+            git push origin ${{ env.BRANCH_NAME }}
+          else
+            echo "ℹ️ No changes detected in CPI. Repository is up to date."
+          fi
