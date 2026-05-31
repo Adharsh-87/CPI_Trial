@@ -24,7 +24,8 @@ echo "Testing CPI API access..."
 
 TEST_RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" \
   "$CPI_HOST/api/v1/IntegrationPackages" \
-  -H "Authorization: Bearer $TOKEN")
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Accept: application/json")
 
 echo "$TEST_RESPONSE"
 
@@ -52,24 +53,54 @@ for ARTIFACT_DIR in "$ARTIFACT_ROOT"/*; do
 
   CONTENT=$(base64 -w 0 "$ZIP_FILE")
 
-  echo "Uploading artifact: $ARTIFACT_ID"
+  echo "Checking whether artifact exists: $ARTIFACT_ID"
 
-  UPLOAD_RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X PUT \
+  CHECK_RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" \
     "$CPI_HOST/api/v1/IntegrationDesigntimeArtifacts(Id='$ARTIFACT_ID',Version='active')" \
     -H "Authorization: Bearer $TOKEN" \
-    -H "Content-Type: application/json" \
-    -d "{
-      \"Name\": \"$ARTIFACT_ID\",
-      \"PackageId\": \"$PACKAGE_ID\",
-      \"ArtifactContent\": \"$CONTENT\"
-    }")
+    -H "Accept: application/json")
 
-  echo "$UPLOAD_RESPONSE"
+  CHECK_STATUS=$(echo "$CHECK_RESPONSE" | grep HTTP_STATUS | cut -d: -f2)
 
-  UPLOAD_STATUS=$(echo "$UPLOAD_RESPONSE" | grep HTTP_STATUS | cut -d: -f2)
+  if [ "$CHECK_STATUS" = "200" ]; then
+    echo "Artifact exists. Updating artifact: $ARTIFACT_ID"
 
-  if [ "$UPLOAD_STATUS" != "200" ] && [ "$UPLOAD_STATUS" != "201" ] && [ "$UPLOAD_STATUS" != "202" ]; then
-    echo "Upload failed for $ARTIFACT_ID"
+    RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X PUT \
+      "$CPI_HOST/api/v1/IntegrationDesigntimeArtifacts(Id='$ARTIFACT_ID',Version='active')" \
+      -H "Authorization: Bearer $TOKEN" \
+      -H "Content-Type: application/json" \
+      -d "{
+        \"Name\": \"$ARTIFACT_ID\",
+        \"PackageId\": \"$PACKAGE_ID\",
+        \"ArtifactContent\": \"$CONTENT\"
+      }")
+
+  elif [ "$CHECK_STATUS" = "404" ]; then
+    echo "Artifact does not exist. Creating artifact: $ARTIFACT_ID"
+
+    RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X POST \
+      "$CPI_HOST/api/v1/IntegrationDesigntimeArtifacts" \
+      -H "Authorization: Bearer $TOKEN" \
+      -H "Content-Type: application/json" \
+      -d "{
+        \"Id\": \"$ARTIFACT_ID\",
+        \"Name\": \"$ARTIFACT_ID\",
+        \"PackageId\": \"$PACKAGE_ID\",
+        \"ArtifactContent\": \"$CONTENT\"
+      }")
+
+  else
+    echo "Could not check artifact status: $ARTIFACT_ID"
+    echo "$CHECK_RESPONSE"
+    exit 1
+  fi
+
+  echo "$RESPONSE"
+
+  STATUS=$(echo "$RESPONSE" | grep HTTP_STATUS | cut -d: -f2)
+
+  if [ "$STATUS" != "200" ] && [ "$STATUS" != "201" ] && [ "$STATUS" != "202" ]; then
+    echo "Create/update failed for $ARTIFACT_ID"
     exit 1
   fi
 
