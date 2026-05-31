@@ -11,8 +11,8 @@ permissions:
   contents: write
 
 env:
-  CPI_TMN_HOST: "https://3503bcbdtrial.integrationsuite-trial01.cfapps.us10-001.hana.ondemand.com" # Change to your CPI host
-  PACKAGE_ID: "https://3503bcbdtrial.integrationsuite-trial01.cfapps.us10-001.hana.ondemand.com/shell/design/contentpackage/TestSample"                                             # Change to your CPI Package ID
+  CPI_TMN_HOST: "https://3503bcbdtrial.it-cpitrial06.cfapps.us10-001.hana.ondemand.com"
+  PACKAGE_ID: "TestSample"                                             # Change to your CPI Package ID
   BRANCH_NAME: "CPI-Main"                                                           # Target branch
 
 jobs:
