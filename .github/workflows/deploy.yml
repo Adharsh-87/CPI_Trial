@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - CPI-Main
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -12,15 +13,16 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Install zip and jq
+      - name: Install tools
         run: sudo apt-get update && sudo apt-get install -y zip jq
 
       - name: Deploy CPI artifacts
         env:
-          CPI_HOST: ${{ secrets.CPI_HOST }}
+          CPI_HOST: https://3503bcbdtrial.integrationsuite-trial01.cfapps.us10-001.hana.ondemand.com
+          CPI_TOKEN_URL: https://3503bcbdtrial.authentication.us10.hana.ondemand.com/oauth/token
           CPI_CLIENT_ID: ${{ secrets.CPI_CLIENT_ID }}
           CPI_CLIENT_SECRET: ${{ secrets.CPI_CLIENT_SECRET }}
-          CPI_TOKEN_URL: ${{ secrets.CPI_TOKEN_URL }}
+          CPI_PACKAGE_ID: TestSample
         run: |
           chmod +x deploy-iflow.sh
           ./deploy-iflow.sh
