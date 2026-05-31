@@ -64,7 +64,7 @@ jobs:
             exit 0
           fi
           
-          TARGET_DIR="${{ github.workspace }}/${{ env.PACKAGE_ID }}"
+          TARGET_DIR="${{ github.workspace }}/${{ env.PACKAGE_ID }}/IntegrationFlow"
           mkdir -p "$TARGET_DIR"
           
           for ARTIFACT_ID in $ARTIFACT_IDS; do
