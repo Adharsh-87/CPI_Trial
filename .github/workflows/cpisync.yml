@@ -29,9 +29,9 @@ jobs:
       # 2. Fetch OAuth Token and Pull/Unzip Artifacts
       - name: Fetch and Process CPI Artifacts
         env:
-          CLIENT_ID: ${{ secrets.CPI_CLIENT_ID }}
-          CLIENT_SECRET: ${{ secrets.CPI_CLIENT_SECRET }}
-          AUTH_URL: ${{ secrets.CPI_AUTH_URL }} # <--- Ensure this exact secret name matches GitHub
+          CLIENT_ID: ${{ secrets.CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+          AUTH_URL: ${{ secrets.AUTH_URL }} # <--- Ensure this exact secret name matches GitHub
         run: |
           set -e
           TMP_DIR="/tmp/cpi_sync_$(date +%s)"
