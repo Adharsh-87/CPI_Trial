@@ -1,0 +1,62 @@
+<vm version="2.0">
+  <group id="e2f0edc6d0aa4716a2f6acbbd3871347">
+    <entry>
+      <agency>COMMERCE</agency>
+      <schema>ProductTypeCom</schema>
+      <value>CR Coil</value>
+    </entry>
+    <entry>
+      <agency>C4C</agency>
+      <schema>ProductTypeC4C</schema>
+      <value>CRC</value>
+    </entry>
+  </group>
+  <group id="a3ed091524194fd9a92115b36047a8d6">
+    <entry>
+      <agency>COMMERCE</agency>
+      <schema>ProductTypeCom</schema>
+      <value>CR Sheet</value>
+    </entry>
+    <entry>
+      <agency>C4C</agency>
+      <schema>ProductTypeC4C</schema>
+      <value>CRL</value>
+    </entry>
+  </group>
+  <group id="903649fb3970444db629ebeb88920aff">
+    <entry isDefault="true">
+      <agency>COMMERCE</agency>
+      <schema>ProductTypeCom</schema>
+      <value>HRAP Coil</value>
+    </entry>
+    <entry>
+      <agency>C4C</agency>
+      <schema>ProductTypeC4C</schema>
+      <value>HRC</value>
+    </entry>
+  </group>
+  <group id="bcfb9d3e2450456a83a1d152726da46a">
+    <entry>
+      <agency>COMMERCE</agency>
+      <schema>ProductTypeCom</schema>
+      <value>HRAP Sheets</value>
+    </entry>
+    <entry>
+      <agency>C4C</agency>
+      <schema>ProductTypeC4C</schema>
+      <value>HRL</value>
+    </entry>
+  </group>
+  <group id="5acb4de3690c46bcaefe0c518e2ea305">
+    <entry>
+      <agency>COMMERCE</agency>
+      <schema>ProductTypeCom</schema>
+      <value>Wide Black Coil</value>
+    </entry>
+    <entry>
+      <agency>C4C</agency>
+      <schema>ProductTypeC4C</schema>
+      <value>HRC</value>
+    </entry>
+  </group>
+</vm>
