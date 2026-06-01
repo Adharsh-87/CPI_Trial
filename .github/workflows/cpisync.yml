@@ -1,4 +1,4 @@
-name: Sync SAP CPI Artifacts to Git
+name: Sync SAP CPI Full Package to Git
 
 on:
   workflow_dispatch:
@@ -12,8 +12,16 @@ jobs:
 
     steps:
 
+      # ============================================
+      # CHECKOUT REPOSITORY
+      # ============================================
+
       - name: Checkout Repository
         uses: actions/checkout@v4
+
+      # ============================================
+      # LOAD CONFIG VARIABLES
+      # ============================================
 
       - name: Load Config Variables
         run: |
@@ -36,15 +44,27 @@ jobs:
 
           done < "$CONFIG_FILE"
 
+      # ============================================
+      # CHECKOUT TARGET BRANCH
+      # ============================================
+
       - name: Checkout Target Branch
         uses: actions/checkout@v4
         with:
           ref: ${{ env.BRANCH_NAME }}
 
+      # ============================================
+      # INSTALL REQUIRED TOOLS
+      # ============================================
+
       - name: Install Required Packages
         run: |
           sudo apt-get update
           sudo apt-get install -y jq unzip
+
+      # ============================================
+      # FETCH FULL PACKAGE ARTIFACTS
+      # ============================================
 
       - name: Fetch and Process CPI Artifacts
         env:
@@ -52,9 +72,11 @@ jobs:
           CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
           AUTH_URL: ${{ secrets.AUTH_URL }}
         run: |
+
           set -e
 
           TMP_DIR="/tmp/cpi_sync_$(date +%s)"
+
           mkdir -p "$TMP_DIR"
 
           echo "🔑 Fetching OAuth token from SAP CPI..."
@@ -66,43 +88,88 @@ jobs:
           ACCESS_TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r '.access_token')
 
           if [ -z "$ACCESS_TOKEN" ] || [ "$ACCESS_TOKEN" == "null" ]; then
-            echo "❌ Error: Failed to fetch access token. Response: $TOKEN_RESPONSE"
+
+            echo "❌ Error: Failed to fetch access token"
+
+            echo "$TOKEN_RESPONSE"
+
             exit 1
           fi
 
-          echo "📦 Fetching live artifacts list for package: ${PACKAGE_ID}..."
+          echo "✅ OAuth token fetched successfully"
 
-          API_URL="${CPI_TMN_HOST}/api/v1/IntegrationPackages('${PACKAGE_ID}')/IntegrationDesigntimeArtifacts"
+          echo "📦 Fetching FULL package artifacts for package: ${PACKAGE_ID}..."
 
-          ARTIFACTS_JSON=$(curl -s -X GET "$API_URL" \
-            -H "Authorization: Bearer $ACCESS_TOKEN" \
-            -H "Accept: application/json" \
-            -H "Cache-Control: no-cache")
+          PACKAGE_ROOT="${{ github.workspace }}/${PACKAGE_ID}"
 
-          ARTIFACT_IDS=$(echo "$ARTIFACTS_JSON" | jq -r '.d.results[].Id')
+          mkdir -p "$PACKAGE_ROOT"
 
-           TARGET_DIR="${{ github.workspace }}/${{ env.PACKAGE_ID }}/IntegrationFlow"
+          # ============================================
+          # FUNCTION TO PROCESS ANY CPI ARTIFACT TYPE
+          # ============================================
 
-          # CRITICAL FOR DELETIONS
-          if [ -d "$TARGET_DIR" ]; then
-            echo "🧹 Clearing local workspace folder..."
-            rm -rf "$TARGET_DIR"
-          fi
+          process_artifact_type () {
 
-          mkdir -p "$TARGET_DIR"
+            ARTIFACT_TYPE=$1
 
-          if [ -z "$ARTIFACT_IDS" ] || [ "$ARTIFACT_IDS" == "null" ]; then
+            API_ENTITY=$2
 
-            echo "⚠️ No artifacts currently exist in CPI package ${PACKAGE_ID}."
+            echo "--------------------------------------------"
 
-          else
+            echo "📦 Processing Artifact Type: $ARTIFACT_TYPE"
+
+            API_URL="${CPI_TMN_HOST}/api/v1/IntegrationPackages('${PACKAGE_ID}')/${API_ENTITY}"
+
+            ARTIFACTS_JSON=$(curl -s -X GET "$API_URL" \
+              -H "Authorization: Bearer $ACCESS_TOKEN" \
+              -H "Accept: application/json" \
+              -H "Cache-Control: no-cache")
+
+            ARTIFACT_IDS=$(echo "$ARTIFACTS_JSON" | jq -r '.d.results[].Id')
+
+            TARGET_DIR="${PACKAGE_ROOT}/${ARTIFACT_TYPE}"
+
+            # ============================================
+            # HANDLE DELETIONS
+            # ============================================
+
+            if [ -d "$TARGET_DIR" ]; then
+
+              echo "🧹 Clearing ${ARTIFACT_TYPE} workspace..."
+
+              rm -rf "$TARGET_DIR"
+
+            fi
+
+            mkdir -p "$TARGET_DIR"
+
+            # ============================================
+            # EMPTY ARTIFACT TYPE
+            # ============================================
+
+            if [ -z "$ARTIFACT_IDS" ] || [ "$ARTIFACT_IDS" == "null" ]; then
+
+              echo "⚠️ No ${ARTIFACT_TYPE} artifacts found."
+
+              touch "${TARGET_DIR}/.gitkeep"
+
+              return
+
+            fi
+
+            # ============================================
+            # PROCESS EACH ARTIFACT
+            # ============================================
 
             for ARTIFACT_ID in $ARTIFACT_IDS; do
 
-              echo "📥 Processing artifact: $ARTIFACT_ID..."
+              echo "📥 Processing ${ARTIFACT_TYPE}: $ARTIFACT_ID"
 
-              # Step A: Try DRAFT version first
-              DOWNLOAD_URL="${CPI_TMN_HOST}/api/v1/IntegrationDesigntimeArtifacts(Id='$ARTIFACT_ID',Version='draft')/\$value"
+              # ============================================
+              # TRY DRAFT VERSION
+              # ============================================
+
+              DOWNLOAD_URL="${CPI_TMN_HOST}/api/v1/${API_ENTITY}(Id='$ARTIFACT_ID',Version='draft')/\$value"
 
               HTTP_STATUS=$(curl -s \
                 -o "$TMP_DIR/$ARTIFACT_ID.zip" \
@@ -111,12 +178,15 @@ jobs:
                 -H "Authorization: Bearer $ACCESS_TOKEN" \
                 -H "Cache-Control: no-cache")
 
-              # Step B: Fallback to ACTIVE
+              # ============================================
+              # FALLBACK TO ACTIVE VERSION
+              # ============================================
+
               if [ "$HTTP_STATUS" -ne 200 ]; then
 
                 echo "ℹ️ No draft found for $ARTIFACT_ID. Fetching active version instead..."
 
-                DOWNLOAD_URL="${CPI_TMN_HOST}/api/v1/IntegrationDesigntimeArtifacts(Id='$ARTIFACT_ID',Version='active')/\$value"
+                DOWNLOAD_URL="${CPI_TMN_HOST}/api/v1/${API_ENTITY}(Id='$ARTIFACT_ID',Version='active')/\$value"
 
                 HTTP_STATUS=$(curl -s \
                   -o "$TMP_DIR/$ARTIFACT_ID.zip" \
@@ -126,12 +196,15 @@ jobs:
                   -H "Cache-Control: no-cache")
               fi
 
-              ARTIFACT_GIT_DIR="$TARGET_DIR/$ARTIFACT_ID"
+              ARTIFACT_GIT_DIR="${TARGET_DIR}/${ARTIFACT_ID}"
 
-              # Remove old content completely
               rm -rf "$ARTIFACT_GIT_DIR"
 
               mkdir -p "$ARTIFACT_GIT_DIR"
+
+              # ============================================
+              # DOWNLOAD FAILURE
+              # ============================================
 
               if [ "$HTTP_STATUS" -ne 200 ]; then
 
@@ -142,29 +215,64 @@ jobs:
                 continue
               fi
 
-              if [ -f "$TMP_DIR/$ARTIFACT_ID.zip" ] && [ -s "$TMP_DIR/$ARTIFACT_ID.zip" ]; then
+              # ============================================
+              # UNZIP ARTIFACT
+              # ============================================
 
-                unzip -q -o "$TMP_DIR/$ARTIFACT_ID.zip" -d "$ARTIFACT_GIT_DIR"
+              if [ -f "$TMP_DIR/$ARTIFACT_ID.zip" ] && \
+                 [ -s "$TMP_DIR/$ARTIFACT_ID.zip" ]; then
 
-                echo "✅ Successfully synced $ARTIFACT_ID"
+                unzip -q -o "$TMP_DIR/$ARTIFACT_ID.zip" \
+                  -d "$ARTIFACT_GIT_DIR"
+
+                echo "✅ Successfully synced ${ARTIFACT_TYPE}: $ARTIFACT_ID"
 
               else
 
                 echo "❌ ZIP file invalid for $ARTIFACT_ID"
 
                 rm -rf "$ARTIFACT_GIT_DIR"
+
               fi
 
             done
-          fi
+          }
+
+          # ============================================
+          # PROCESS ALL CPI PACKAGE ARTIFACT TYPES
+          # ============================================
+
+          process_artifact_type "IntegrationFlow" \
+            "IntegrationDesigntimeArtifacts"
+
+          process_artifact_type "ScriptCollection" \
+            "ScriptCollectionDesigntimeArtifacts"
+
+          process_artifact_type "ValueMapping" \
+            "ValueMappingDesigntimeArtifacts"
+
+          process_artifact_type "MessageMapping" \
+            "MessageMappingDesigntimeArtifacts"
+
+          # ============================================
+          # CLEANUP TEMP FILES
+          # ============================================
 
           rm -rf "$TMP_DIR"
+
+      # ============================================
+      # COMMIT AND PUSH TO GITHUB
+      # ============================================
 
       - name: Commit and Push Changes
         run: |
 
           git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          git config --global user.email \
+            "github-actions[bot]@users.noreply.github.com"
+
+          echo "📋 Git Status"
 
           git status
 
@@ -172,15 +280,20 @@ jobs:
 
           if [[ -n $(git status --porcelain) ]]; then
 
-            git commit -m "Auto-sync CPI Package: ${PACKAGE_ID} Lifecycle Sync (Build ${GITHUB_RUN_NUMBER})"
+            echo "✅ Changes detected"
+
+            git commit -m \
+              "Auto-sync CPI Full Package: ${PACKAGE_ID} (Build ${GITHUB_RUN_NUMBER})"
 
             echo "📤 Pushing updates to GitHub..."
 
             git push origin ${BRANCH_NAME}
 
+            echo "✅ Sync completed successfully"
+
           else
 
-            echo "ℹ️ Workspace matches CPI perfectly. No changes to commit."
+            echo "ℹ️ Workspace matches CPI perfectly. No changes detected."
 
           fi
 
