@@ -169,11 +169,13 @@ jobs:
               exit 1
             fi
 
-            ARTIFACT_LIST="$ARTIFACT_ID"
+            ARTIFACT_LIST=$(printf '%s' "$ARTIFACT_ID" | tr -d '\r')
 
           else
 
-            ARTIFACT_LIST=$(echo "$ARTIFACTS_JSON" | jq -r '.d.results[].Id')
+            ARTIFACT_LIST=$(echo "$ARTIFACTS_JSON" | jq -r '.d.results[].Id' | tr -d '\r')
+            echo "Resolved artifact list:"
+            echo "$ARTIFACT_LIST"
 
           fi
 
@@ -206,18 +208,32 @@ jobs:
 
             echo "Processing: $CURRENT_ARTIFACT"
 
-            ARTIFACT_OBJ=$(echo "$ARTIFACTS_JSON" | jq -c ".d.results[] | select(.Id==\"$CURRENT_ARTIFACT\")")
+            ARTIFACT_ID_NORMALIZED=$(printf '%s' "$CURRENT_ARTIFACT" | tr -d '\r' | xargs)
+            ARTIFACT_OBJ=$(echo "$ARTIFACTS_JSON" | jq -c --arg id "$ARTIFACT_ID_NORMALIZED" '
+              .d.results[]
+              | select(
+                  .Id == $id or
+                  .Name == $id or
+                  (.Id | ascii_downcase == ($id | ascii_downcase)) or
+                  (.Name | ascii_downcase == ($id | ascii_downcase))
+                )
+            ')
 
             if [ -z "$ARTIFACT_OBJ" ]; then
               echo "❌ Artifact metadata not found for $CURRENT_ARTIFACT"
-              echo "Raw artifacts JSON entry:"
-              echo "$ARTIFACTS_JSON" | jq -c '.d.results[]'
+              echo "Available artifacts (Id | Name):"
+              echo "$ARTIFACTS_JSON" | jq -r '.d.results[] | "\(.Id) | \(.Name // \"\")"'
               continue
+            fi
+
+            ACTUAL_ARTIFACT_ID=$(echo "$ARTIFACT_OBJ" | jq -r '.Id')
+            if [ "$ACTUAL_ARTIFACT_ID" != "$ARTIFACT_ID_NORMALIZED" ]; then
+              echo "Using resolved artifact ID: $ACTUAL_ARTIFACT_ID"
             fi
 
             echo "Artifact metadata: $ARTIFACT_OBJ"
 
-            ARTIFACT_TYPE=$(echo "$ARTIFACT_OBJ" | jq -r '.ArtifactType // .artifactType // empty')
+            ARTIFACT_TYPE=$(echo "$ARTIFACT_OBJ" | jq -r '.ArtifactType // .artifactType // empty' | tr '[:lower:]' '[:upper:]' | tr ' -' '_' | tr -d '\r')
 
             if [ -z "$ARTIFACT_TYPE" ] || [ "$ARTIFACT_TYPE" == "null" ]; then
               ARTIFACT_TYPE="UNKNOWN"
@@ -255,15 +271,16 @@ jobs:
 
             mkdir -p "$TARGET_BASE"
 
-            ARTIFACT_DIR="$TARGET_BASE/$CURRENT_ARTIFACT"
+            ARTIFACT_KEY="$ACTUAL_ARTIFACT_ID"
+            ARTIFACT_DIR="$TARGET_BASE/$ARTIFACT_KEY"
 
             rm -rf "$ARTIFACT_DIR"
 
             mkdir -p "$ARTIFACT_DIR"
 
-            DOWNLOAD_URL="${CPI_TMN_HOST}/api/v1/IntegrationDesigntimeArtifacts(Id='$CURRENT_ARTIFACT',Version='$VERSION_TYPE')/\$value"
+            DOWNLOAD_URL="${CPI_TMN_HOST}/api/v1/IntegrationDesigntimeArtifacts(Id='$ARTIFACT_KEY',Version='$VERSION_TYPE')/\$value"
 
-            ZIP_FILE="$TMP_DIR/$CURRENT_ARTIFACT.zip"
+            ZIP_FILE="$TMP_DIR/$ARTIFACT_KEY.zip"
 
             echo "Downloading from: $DOWNLOAD_URL"
 
@@ -279,7 +296,7 @@ jobs:
 
               echo "Draft not found. Trying active..."
 
-              DOWNLOAD_URL="${CPI_TMN_HOST}/api/v1/IntegrationDesigntimeArtifacts(Id='$CURRENT_ARTIFACT',Version='active')/\$value"
+              DOWNLOAD_URL="${CPI_TMN_HOST}/api/v1/IntegrationDesigntimeArtifacts(Id='$ARTIFACT_KEY',Version='active')/\$value"
 
               HTTP_STATUS=$(curl -sSL -w "%{http_code}" -o "$ZIP_FILE" \
                 -X GET "$DOWNLOAD_URL" \
@@ -312,7 +329,7 @@ jobs:
             unzip -q -o "$ZIP_FILE" \
               -d "$ARTIFACT_DIR"
 
-            echo "Synced: $CURRENT_ARTIFACT"
+            echo "Synced: $ARTIFACT_KEY"
 
           done
 
