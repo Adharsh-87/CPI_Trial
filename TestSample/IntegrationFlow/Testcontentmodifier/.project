@@ -1,6 +1,7 @@
-<?xml version="1.0" encoding="UTF-8"?><projectDescription>
-	<name>Testcontentmodifier</name>
-	<comment/>
+<?xml version="1.0" encoding="UTF-8"?>
+<projectDescription>
+	<name>iflow-Testcontentmodifier</name>
+	<comment></comment>
 	<projects>
 	</projects>
 	<buildSpec>
@@ -9,16 +10,20 @@
 			<arguments>
 			</arguments>
 		</buildCommand>
+		<buildCommand>
+			<name>org.eclipse.buildship.core.gradleprojectbuilder</name>
+			<arguments>
+			</arguments>
+		</buildCommand>
 	</buildSpec>
 	<natures>
 		<nature>org.eclipse.jdt.core.javanature</nature>
-		<nature>com.sap.ide.ifl.project.support.project.nature</nature>
-		<nature>com.sap.ide.ifl.bsn</nature>
+		<nature>org.eclipse.buildship.core.gradleprojectnature</nature>
 	</natures>
 	<filteredResources>
 		<filter>
 			<id>1780222220891</id>
-			<name/>
+			<name></name>
 			<type>30</type>
 			<matcher>
 				<id>org.eclipse.core.resources.regexFilterMatcher</id>
