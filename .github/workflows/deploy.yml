@@ -33,14 +33,19 @@ jobs:
           echo "📦 Loading configuration..."
 
           if [ ! -f "$CONFIG_FILE" ]; then
+
             echo "❌ Config file missing"
+
             exit 1
+
           fi
 
           while IFS='=' read -r key value; do
 
             if [[ ! "$key" =~ ^# ]] && [[ -n "$key" ]]; then
+
               echo "$key=$value" >> $GITHUB_ENV
+
             fi
 
           done < "$CONFIG_FILE"
@@ -126,9 +131,23 @@ jobs:
 
           for ARTIFACT_DIR in "$ARTIFACT_ROOT"/*; do
 
+            # Skip non-directories
             [ -d "$ARTIFACT_DIR" ] || continue
 
             ARTIFACT_ID=$(basename "$ARTIFACT_DIR")
+
+            # ============================================
+            # DEPLOY ONLY SELECTED ARTIFACT
+            # ============================================
+
+            if [ -n "$DEPLOY_ARTIFACT" ] && \
+               [ "$ARTIFACT_ID" != "$DEPLOY_ARTIFACT" ]; then
+
+              echo "⏭️ Skipping artifact: $ARTIFACT_ID"
+
+              continue
+
+            fi
 
             ZIP_FILE="/tmp/${ARTIFACT_ID}.zip"
 
@@ -265,5 +284,4 @@ jobs:
 
           done
 
-          echo "🎉 All artifacts deployed successfully"
-
+          echo "🎉 Artifact deployment completed successfully"
