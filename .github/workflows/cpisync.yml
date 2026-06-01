@@ -15,24 +15,25 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Load Configuration
+      - name: Load Config Variables
         run: |
-          echo "📦 Loading external configuration..."
 
           CONFIG_FILE=".github/config/cpi-config.env"
 
+          echo "📦 Loading configuration from $CONFIG_FILE"
+
           if [ ! -f "$CONFIG_FILE" ]; then
-            echo "❌ Config file not found: $CONFIG_FILE"
+            echo "❌ Config file not found"
             exit 1
           fi
 
-          cat "$CONFIG_FILE"
-
-          # Export variables into GitHub Actions environment
           while IFS='=' read -r key value; do
+
+            # Ignore comments and empty lines
             if [[ ! "$key" =~ ^# ]] && [[ -n "$key" ]]; then
               echo "$key=$value" >> $GITHUB_ENV
             fi
+
           done < "$CONFIG_FILE"
 
       - name: Checkout Target Branch
@@ -51,13 +52,12 @@ jobs:
           CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
           AUTH_URL: ${{ secrets.AUTH_URL }}
         run: |
-
           set -e
 
           TMP_DIR="/tmp/cpi_sync_$(date +%s)"
           mkdir -p "$TMP_DIR"
 
-          echo "🔑 Fetching OAuth token..."
+          echo "🔑 Fetching OAuth token from SAP CPI..."
 
           TOKEN_RESPONSE=$(curl -s -X POST "$AUTH_URL" \
             -u "$CLIENT_ID:$CLIENT_SECRET" \
@@ -66,12 +66,11 @@ jobs:
           ACCESS_TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r '.access_token')
 
           if [ -z "$ACCESS_TOKEN" ] || [ "$ACCESS_TOKEN" == "null" ]; then
-            echo "❌ Failed to fetch access token"
-            echo "$TOKEN_RESPONSE"
+            echo "❌ Error: Failed to fetch access token. Response: $TOKEN_RESPONSE"
             exit 1
           fi
 
-          echo "📦 Fetching CPI artifacts..."
+          echo "📦 Fetching live artifacts list for package: ${PACKAGE_ID}..."
 
           API_URL="${CPI_TMN_HOST}/api/v1/IntegrationPackages('${PACKAGE_ID}')/IntegrationDesigntimeArtifacts"
 
@@ -84,9 +83,9 @@ jobs:
 
           TARGET_DIR="${GITHUB_WORKSPACE}/${PACKAGE_ID}/IntegrationFlow"
 
-          echo "🧹 Cleaning local workspace..."
-
+          # CRITICAL FOR DELETIONS
           if [ -d "$TARGET_DIR" ]; then
+            echo "🧹 Clearing local workspace folder..."
             rm -rf "$TARGET_DIR"
           fi
 
@@ -94,45 +93,64 @@ jobs:
 
           if [ -z "$ARTIFACT_IDS" ] || [ "$ARTIFACT_IDS" == "null" ]; then
 
-            echo "⚠️ No artifacts found"
+            echo "⚠️ No artifacts currently exist in CPI package ${PACKAGE_ID}."
 
           else
 
             for ARTIFACT_ID in $ARTIFACT_IDS; do
 
-              echo "📥 Processing artifact: $ARTIFACT_ID"
+              echo "📥 Processing artifact: $ARTIFACT_ID..."
 
-              ARTIFACT_GIT_DIR="$TARGET_DIR/$ARTIFACT_ID"
-
-              rm -rf "$ARTIFACT_GIT_DIR"
-              mkdir -p "$ARTIFACT_GIT_DIR"
-
-              ZIP_FILE="$TMP_DIR/$ARTIFACT_ID.zip"
-
-              DOWNLOAD_URL="${CPI_TMN_HOST}/api/v1/IntegrationDesigntimeArtifacts(Id='$ARTIFACT_ID',Version='active')/\$value"
+              # Step A: Try DRAFT version first
+              DOWNLOAD_URL="${CPI_TMN_HOST}/api/v1/IntegrationDesigntimeArtifacts(Id='$ARTIFACT_ID',Version='draft')/\$value"
 
               HTTP_STATUS=$(curl -s \
-                -o "$ZIP_FILE" \
+                -o "$TMP_DIR/$ARTIFACT_ID.zip" \
                 -w "%{http_code}" \
                 -X GET "$DOWNLOAD_URL" \
                 -H "Authorization: Bearer $ACCESS_TOKEN" \
                 -H "Cache-Control: no-cache")
 
+              # Step B: Fallback to ACTIVE
               if [ "$HTTP_STATUS" -ne 200 ]; then
-                echo "❌ Failed to download $ARTIFACT_ID"
+
+                echo "ℹ️ No draft found for $ARTIFACT_ID. Fetching active version instead..."
+
+                DOWNLOAD_URL="${CPI_TMN_HOST}/api/v1/IntegrationDesigntimeArtifacts(Id='$ARTIFACT_ID',Version='active')/\$value"
+
+                HTTP_STATUS=$(curl -s \
+                  -o "$TMP_DIR/$ARTIFACT_ID.zip" \
+                  -w "%{http_code}" \
+                  -X GET "$DOWNLOAD_URL" \
+                  -H "Authorization: Bearer $ACCESS_TOKEN" \
+                  -H "Cache-Control: no-cache")
+              fi
+
+              ARTIFACT_GIT_DIR="$TARGET_DIR/$ARTIFACT_ID"
+
+              # Remove old content completely
+              rm -rf "$ARTIFACT_GIT_DIR"
+
+              mkdir -p "$ARTIFACT_GIT_DIR"
+
+              if [ "$HTTP_STATUS" -ne 200 ]; then
+
+                echo "❌ Failed to fetch payload bundle for $ARTIFACT_ID"
+
                 rm -rf "$ARTIFACT_GIT_DIR"
+
                 continue
               fi
 
-              if [ -f "$ZIP_FILE" ] && [ -s "$ZIP_FILE" ]; then
+              if [ -f "$TMP_DIR/$ARTIFACT_ID.zip" ] && [ -s "$TMP_DIR/$ARTIFACT_ID.zip" ]; then
 
-                unzip -q -o "$ZIP_FILE" -d "$ARTIFACT_GIT_DIR"
+                unzip -q -o "$TMP_DIR/$ARTIFACT_ID.zip" -d "$ARTIFACT_GIT_DIR"
 
-                echo "✅ Synced $ARTIFACT_ID"
+                echo "✅ Successfully synced $ARTIFACT_ID"
 
               else
 
-                echo "❌ Invalid ZIP for $ARTIFACT_ID"
+                echo "❌ ZIP file invalid for $ARTIFACT_ID"
 
                 rm -rf "$ARTIFACT_GIT_DIR"
               fi
@@ -154,15 +172,15 @@ jobs:
 
           if [[ -n $(git status --porcelain) ]]; then
 
-            git commit -m "Auto-sync CPI Package: ${PACKAGE_ID} (Build ${GITHUB_RUN_NUMBER})"
+            git commit -m "Auto-sync CPI Package: ${PACKAGE_ID} Lifecycle Sync (Build ${GITHUB_RUN_NUMBER})"
 
-            echo "📤 Pushing changes..."
+            echo "📤 Pushing updates to GitHub..."
 
             git push origin ${BRANCH_NAME}
 
           else
 
-            echo "ℹ️ No changes detected"
+            echo "ℹ️ Workspace matches CPI perfectly. No changes to commit."
 
           fi
 
