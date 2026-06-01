@@ -155,7 +155,7 @@
         </bpmn2:callActivity>
         <bpmn2:startEvent id="StartEvent_4" name="Start Timer 1">
             <bpmn2:outgoing>SequenceFlow_6</bpmn2:outgoing>
-            <bpmn2:timerEventDefinition id="TimerEventDefinition_225093">
+            <bpmn2:timerEventDefinition id="TimerEventDefinition_463547">
                 <bpmn2:extensionElements>
                     <ifl:property>
                         <key>scheduleKey</key>
