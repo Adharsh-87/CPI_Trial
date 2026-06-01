@@ -129,9 +129,26 @@ jobs:
 
           echo "Fetching package artifacts..."
 
-          ARTIFACTS_JSON=$(curl -s -X GET "$API_URL" \
+          ARTIFACTS_RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X GET "$API_URL" \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
             -H "Accept: application/json")
+
+          ARTIFACTS_HTTP_STATUS=$(echo "$ARTIFACTS_RESPONSE" | tail -n1 | sed 's/HTTP_STATUS://')
+          ARTIFACTS_JSON=$(echo "$ARTIFACTS_RESPONSE" | sed '$d')
+
+          echo "Artifact fetch HTTP status: $ARTIFACTS_HTTP_STATUS"
+
+          if [ "$ARTIFACTS_HTTP_STATUS" != "200" ]; then
+            echo "❌ Failed to fetch package artifacts"
+            echo "$ARTIFACTS_JSON"
+            exit 1
+          fi
+
+          if ! echo "$ARTIFACTS_JSON" | jq -e . >/dev/null 2>&1; then
+            echo "❌ Invalid JSON from CPI package artifacts API"
+            echo "$ARTIFACTS_JSON"
+            exit 1
+          fi
 
           if [ "$SYNC_MODE" == "SINGLE" ]; then
 
@@ -146,6 +163,11 @@ jobs:
 
             ARTIFACT_LIST=$(echo "$ARTIFACTS_JSON" | jq -r '.d.results[].Id')
 
+          fi
+
+          if [ -z "$ARTIFACT_LIST" ]; then
+            echo "❌ No artifacts found for package $PACKAGE_ID"
+            exit 1
           fi
 
           # =====================================================
