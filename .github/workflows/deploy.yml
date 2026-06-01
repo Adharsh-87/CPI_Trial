@@ -1,4 +1,4 @@
-name: Import CPI Package from GitHub
+name: Deploy CPI Artifacts
 
 on:
   push:
@@ -9,18 +9,33 @@ permissions:
   contents: read
 
 jobs:
-  import-package:
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
 
+      # ============================================
+      # CHECKOUT REPOSITORY
+      # ============================================
+
       - name: Checkout Repository
         uses: actions/checkout@v4
+
+      # ============================================
+      # LOAD CONFIG VARIABLES
+      # ============================================
 
       - name: Load Config Variables
         run: |
 
-          CONFIG_FILE=".github/config/cpi-package.env"
+          CONFIG_FILE=".github/config/cpi-deploy.env"
+
+          echo "📦 Loading configuration..."
+
+          if [ ! -f "$CONFIG_FILE" ]; then
+            echo "❌ Config file missing"
+            exit 1
+          fi
 
           while IFS='=' read -r key value; do
 
@@ -30,62 +45,225 @@ jobs:
 
           done < "$CONFIG_FILE"
 
-      - name: Install Tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y jq curl
+      # ============================================
+      # INSTALL REQUIRED PACKAGES
+      # ============================================
 
-      - name: Import Full Package to CPI
+      - name: Install Required Packages
+        run: |
+
+          sudo apt-get update
+
+          sudo apt-get install -y zip jq curl
+
+      # ============================================
+      # DEPLOY ARTIFACTS TO CPI
+      # ============================================
+
+      - name: Deploy Artifacts to SAP CPI
         env:
-          CLIENT_ID: ${{ secrets.CLIENT_ID }}
-          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
-          AUTH_URL: ${{ secrets.AUTH_URL }}
+          CPI_CLIENT_ID: ${{ secrets.CPI_CLIENT_ID }}
+          CPI_CLIENT_SECRET: ${{ secrets.CPI_CLIENT_SECRET }}
+
         run: |
 
           set -e
 
-          PACKAGE_ZIP="packages/${PACKAGE_ID}.zip"
-
-          if [ ! -f "$PACKAGE_ZIP" ]; then
-            echo "❌ Package ZIP not found"
-            exit 1
-          fi
+          PACKAGE_ID="${CPI_PACKAGE_ID}"
 
           echo "🔑 Fetching OAuth token..."
 
-          TOKEN_RESPONSE=$(curl -s -X POST "$AUTH_URL" \
-            -u "$CLIENT_ID:$CLIENT_SECRET" \
-            -d "grant_type=client_credentials&response_type=token")
+          TOKEN_RESPONSE=$(curl -s -X POST \
+            -u "$CPI_CLIENT_ID:$CPI_CLIENT_SECRET" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -d "grant_type=client_credentials" \
+            "$CPI_TOKEN_URL")
 
-          ACCESS_TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r '.access_token')
+          TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r '.access_token')
 
-          if [ -z "$ACCESS_TOKEN" ] || [ "$ACCESS_TOKEN" == "null" ]; then
-            echo "❌ Failed to fetch token"
-            exit 1
-          fi
+          if [ "$TOKEN" = "null" ] || [ -z "$TOKEN" ]; then
 
-          echo "📦 Importing package into CPI..."
+            echo "❌ Failed to get access token"
 
-          HTTP_STATUS=$(curl -s \
-            -o response.txt \
-            -w "%{http_code}" \
-            -X POST \
-            "${CPI_TMN_HOST}/api/v1/IntegrationPackages" \
-            -H "Authorization: Bearer $ACCESS_TOKEN" \
-            -H "Content-Type: application/octet-stream" \
-            --data-binary @"$PACKAGE_ZIP")
-
-          cat response.txt
-
-          if [ "$HTTP_STATUS" != "200" ] && \
-             [ "$HTTP_STATUS" != "201" ] && \
-             [ "$HTTP_STATUS" != "202" ]; then
-
-            echo "❌ Package import failed"
+            echo "$TOKEN_RESPONSE"
 
             exit 1
 
           fi
 
-          echo "✅ Full package imported successfully"
+          echo "✅ OAuth token fetched"
+
+          # ============================================
+          # TEST CPI API ACCESS
+          # ============================================
+
+          echo "🔍 Testing CPI API access..."
+
+          TEST_RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" \
+            "$CPI_HOST/api/v1/IntegrationPackages" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Accept: application/json")
+
+          TEST_STATUS=$(echo "$TEST_RESPONSE" | grep HTTP_STATUS | cut -d: -f2)
+
+          if [ "$TEST_STATUS" != "200" ]; then
+
+            echo "❌ CPI API access failed"
+
+            echo "$TEST_RESPONSE"
+
+            exit 1
+
+          fi
+
+          echo "✅ CPI API access verified"
+
+          echo "📦 Reading artifacts from: $ARTIFACT_ROOT"
+
+          # ============================================
+          # PROCESS EACH ARTIFACT
+          # ============================================
+
+          for ARTIFACT_DIR in "$ARTIFACT_ROOT"/*; do
+
+            [ -d "$ARTIFACT_DIR" ] || continue
+
+            ARTIFACT_ID=$(basename "$ARTIFACT_DIR")
+
+            ZIP_FILE="/tmp/${ARTIFACT_ID}.zip"
+
+            echo "------------------------------------------"
+
+            echo "📥 Processing artifact: $ARTIFACT_ID"
+
+            rm -f "$ZIP_FILE"
+
+            # ============================================
+            # CREATE ZIP PACKAGE
+            # ============================================
+
+            echo "🗜️ Creating ZIP package..."
+
+            (
+              cd "$ARTIFACT_DIR"
+
+              zip -r "$ZIP_FILE" .
+            )
+
+            if [ ! -f "$ZIP_FILE" ]; then
+
+              echo "❌ ZIP creation failed"
+
+              exit 1
+
+            fi
+
+            CONTENT=$(base64 -w 0 "$ZIP_FILE")
+
+            # ============================================
+            # CHECK WHETHER ARTIFACT EXISTS
+            # ============================================
+
+            echo "🔍 Checking whether artifact exists in CPI..."
+
+            CHECK_RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" \
+              "$CPI_HOST/api/v1/IntegrationDesigntimeArtifacts(Id='$ARTIFACT_ID',Version='active')" \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "Accept: application/json")
+
+            CHECK_STATUS=$(echo "$CHECK_RESPONSE" | grep HTTP_STATUS | cut -d: -f2)
+
+            # ============================================
+            # UPDATE EXISTING ARTIFACT
+            # ============================================
+
+            if [ "$CHECK_STATUS" = "200" ]; then
+
+              echo "♻️ Artifact exists. Updating..."
+
+              RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X PUT \
+                "$CPI_HOST/api/v1/IntegrationDesigntimeArtifacts(Id='$ARTIFACT_ID',Version='active')" \
+                -H "Authorization: Bearer $TOKEN" \
+                -H "Content-Type: application/json" \
+                -d "{
+                  \"Name\": \"$ARTIFACT_ID\",
+                  \"PackageId\": \"$PACKAGE_ID\",
+                  \"ArtifactContent\": \"$CONTENT\"
+                }")
+
+            # ============================================
+            # CREATE NEW ARTIFACT
+            # ============================================
+
+            elif [ "$CHECK_STATUS" = "404" ]; then
+
+              echo "🆕 Artifact does not exist. Creating..."
+
+              RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X POST \
+                "$CPI_HOST/api/v1/IntegrationDesigntimeArtifacts" \
+                -H "Authorization: Bearer $TOKEN" \
+                -H "Content-Type: application/json" \
+                -d "{
+                  \"Id\": \"$ARTIFACT_ID\",
+                  \"Name\": \"$ARTIFACT_ID\",
+                  \"PackageId\": \"$PACKAGE_ID\",
+                  \"ArtifactContent\": \"$CONTENT\"
+                }")
+
+            else
+
+              echo "❌ Could not verify artifact status"
+
+              echo "$CHECK_RESPONSE"
+
+              exit 1
+
+            fi
+
+            STATUS=$(echo "$RESPONSE" | grep HTTP_STATUS | cut -d: -f2)
+
+            echo "$RESPONSE"
+
+            # ============================================
+            # VALIDATE CREATE/UPDATE RESPONSE
+            # ============================================
+
+            if [ "$STATUS" != "200" ] && \
+               [ "$STATUS" != "201" ] && \
+               [ "$STATUS" != "202" ]; then
+
+              echo "❌ Artifact create/update failed"
+
+              exit 1
+
+            fi
+
+            # ============================================
+            # DEPLOY ARTIFACT
+            # ============================================
+
+            echo "🚀 Deploying artifact..."
+
+            DEPLOY_RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X POST \
+              "$CPI_HOST/api/v1/DeployIntegrationDesigntimeArtifact?Id='$ARTIFACT_ID'&Version='active'" \
+              -H "Authorization: Bearer $TOKEN")
+
+            DEPLOY_STATUS=$(echo "$DEPLOY_RESPONSE" | grep HTTP_STATUS | cut -d: -f2)
+
+            echo "$DEPLOY_RESPONSE"
+
+            if [ "$DEPLOY_STATUS" != "200" ] && \
+               [ "$DEPLOY_STATUS" != "202" ]; then
+
+              echo "❌ Deployment failed for $ARTIFACT_ID"
+
+              exit 1
+
+            fi
+
+            echo "✅ Successfully deployed: $ARTIFACT_ID"
+
+          done
+
+          echo "🎉 All artifacts deployed successfully"
 
