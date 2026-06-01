@@ -1,4 +1,4 @@
-name: Export CPI Package to GitHub
+name: Sync SAP CPI Artifacts to Git
 
 on:
   workflow_dispatch:
@@ -7,44 +7,80 @@ permissions:
   contents: write
 
 jobs:
-  export-package:
+  sync-artifacts:
     runs-on: ubuntu-latest
 
     steps:
 
+      # ============================================
+      # CHECKOUT REPOSITORY
+      # ============================================
+
       - name: Checkout Repository
         uses: actions/checkout@v4
+
+      # ============================================
+      # LOAD CONFIG VARIABLES
+      # ============================================
 
       - name: Load Config Variables
         run: |
 
-          CONFIG_FILE=".github/config/cpi-package.env"
+          CONFIG_FILE=".github/config/cpi-config.env"
+
+          echo "📦 Loading configuration from $CONFIG_FILE"
+
+          if [ ! -f "$CONFIG_FILE" ]; then
+            echo "❌ Config file not found"
+            exit 1
+          fi
 
           while IFS='=' read -r key value; do
 
+            # Ignore comments and empty lines
             if [[ ! "$key" =~ ^# ]] && [[ -n "$key" ]]; then
               echo "$key=$value" >> $GITHUB_ENV
             fi
 
           done < "$CONFIG_FILE"
 
-      - name: Install Tools
+      # ============================================
+      # CHECKOUT TARGET BRANCH
+      # ============================================
+
+      - name: Checkout Target Branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.BRANCH_NAME }}
+
+      # ============================================
+      # INSTALL REQUIRED PACKAGES
+      # ============================================
+
+      - name: Install Required Packages
         run: |
           sudo apt-get update
-          sudo apt-get install -y jq unzip curl
+          sudo apt-get install -y jq unzip
 
-      - name: Export Full CPI Package
+      # ============================================
+      # FETCH AND PROCESS CPI ARTIFACTS
+      # ============================================
+
+      - name: Fetch and Process CPI Artifacts
         env:
           CLIENT_ID: ${{ secrets.CLIENT_ID }}
           CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
           AUTH_URL: ${{ secrets.AUTH_URL }}
+
         run: |
 
           set -e
 
-          mkdir -p packages
+          TMP_DIR="/tmp/cpi_sync_$(date +%s)"
 
-          echo "🔑 Fetching OAuth token..."
+          mkdir -p "$TMP_DIR"
+
+          echo "🔑 Fetching OAuth token from SAP CPI..."
 
           TOKEN_RESPONSE=$(curl -s -X POST "$AUTH_URL" \
             -u "$CLIENT_ID:$CLIENT_SECRET" \
@@ -53,28 +89,151 @@ jobs:
           ACCESS_TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r '.access_token')
 
           if [ -z "$ACCESS_TOKEN" ] || [ "$ACCESS_TOKEN" == "null" ]; then
-            echo "❌ Failed to fetch token"
+
+            echo "❌ Error: Failed to fetch access token"
+
+            echo "Response: $TOKEN_RESPONSE"
+
             exit 1
+
           fi
 
-          echo "📦 Exporting full package..."
+          echo "📦 Fetching live artifacts list for package: ${PACKAGE_ID}..."
 
-          DOWNLOAD_URL="${CPI_TMN_HOST}/api/v1/IntegrationPackages('${PACKAGE_ID}')/\$value"
+          API_URL="${CPI_TMN_HOST}/api/v1/IntegrationPackages('${PACKAGE_ID}')/IntegrationDesigntimeArtifacts"
 
-          HTTP_STATUS=$(curl -s \
-            -o "packages/${PACKAGE_ID}.zip" \
-            -w "%{http_code}" \
-            -X GET "$DOWNLOAD_URL" \
-            -H "Authorization: Bearer $ACCESS_TOKEN")
+          ARTIFACTS_JSON=$(curl -s -X GET "$API_URL" \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H "Accept: application/json" \
+            -H "Cache-Control: no-cache")
 
-          if [ "$HTTP_STATUS" -ne 200 ]; then
-            echo "❌ Package export failed"
-            exit 1
+          ARTIFACT_IDS=$(echo "$ARTIFACTS_JSON" | jq -r '.d.results[].Id')
+
+          TARGET_DIR="${{ github.workspace }}/${{ env.PACKAGE_ID }}/IntegrationFlow"
+
+          # ============================================
+          # HANDLE DELETIONS
+          # ============================================
+
+          if [ -d "$TARGET_DIR" ]; then
+
+            echo "🧹 Clearing local workspace folder..."
+
+            rm -rf "$TARGET_DIR"
+
           fi
 
-          echo "✅ Package exported successfully"
+          mkdir -p "$TARGET_DIR"
 
-      - name: Commit and Push Package
+          # ============================================
+          # NO ARTIFACTS FOUND
+          # ============================================
+
+          if [ -z "$ARTIFACT_IDS" ] || [ "$ARTIFACT_IDS" == "null" ]; then
+
+            echo "⚠️ No artifacts currently exist in CPI package ${PACKAGE_ID}."
+
+          else
+
+            # ============================================
+            # PROCESS EACH ARTIFACT
+            # ============================================
+
+            for ARTIFACT_ID in $ARTIFACT_IDS; do
+
+              echo "📥 Processing artifact: $ARTIFACT_ID..."
+
+              # ============================================
+              # TRY DRAFT VERSION FIRST
+              # ============================================
+
+              DOWNLOAD_URL="${CPI_TMN_HOST}/api/v1/IntegrationDesigntimeArtifacts(Id='$ARTIFACT_ID',Version='draft')/\$value"
+
+              HTTP_STATUS=$(curl -s \
+                -o "$TMP_DIR/$ARTIFACT_ID.zip" \
+                -w "%{http_code}" \
+                -X GET "$DOWNLOAD_URL" \
+                -H "Authorization: Bearer $ACCESS_TOKEN" \
+                -H "Cache-Control: no-cache")
+
+              # ============================================
+              # FALLBACK TO ACTIVE VERSION
+              # ============================================
+
+              if [ "$HTTP_STATUS" -ne 200 ]; then
+
+                echo "ℹ️ No draft found for $ARTIFACT_ID. Fetching active version instead..."
+
+                DOWNLOAD_URL="${CPI_TMN_HOST}/api/v1/IntegrationDesigntimeArtifacts(Id='$ARTIFACT_ID',Version='active')/\$value"
+
+                HTTP_STATUS=$(curl -s \
+                  -o "$TMP_DIR/$ARTIFACT_ID.zip" \
+                  -w "%{http_code}" \
+                  -X GET "$DOWNLOAD_URL" \
+                  -H "Authorization: Bearer $ACCESS_TOKEN" \
+                  -H "Cache-Control: no-cache")
+
+              fi
+
+              ARTIFACT_GIT_DIR="$TARGET_DIR/$ARTIFACT_ID"
+
+              # ============================================
+              # REMOVE OLD CONTENT
+              # ============================================
+
+              rm -rf "$ARTIFACT_GIT_DIR"
+
+              mkdir -p "$ARTIFACT_GIT_DIR"
+
+              # ============================================
+              # DOWNLOAD FAILURE
+              # ============================================
+
+              if [ "$HTTP_STATUS" -ne 200 ]; then
+
+                echo "❌ Failed to fetch payload bundle for $ARTIFACT_ID"
+
+                rm -rf "$ARTIFACT_GIT_DIR"
+
+                continue
+
+              fi
+
+              # ============================================
+              # UNZIP ARTIFACT
+              # ============================================
+
+              if [ -f "$TMP_DIR/$ARTIFACT_ID.zip" ] && \
+                 [ -s "$TMP_DIR/$ARTIFACT_ID.zip" ]; then
+
+                unzip -q -o "$TMP_DIR/$ARTIFACT_ID.zip" \
+                  -d "$ARTIFACT_GIT_DIR"
+
+                echo "✅ Successfully synced $ARTIFACT_ID"
+
+              else
+
+                echo "❌ ZIP file invalid for $ARTIFACT_ID"
+
+                rm -rf "$ARTIFACT_GIT_DIR"
+
+              fi
+
+            done
+
+          fi
+
+          # ============================================
+          # CLEAN TEMP FILES
+          # ============================================
+
+          rm -rf "$TMP_DIR"
+
+      # ============================================
+      # COMMIT AND PUSH CHANGES
+      # ============================================
+
+      - name: Commit and Push Changes
         run: |
 
           git config --global user.name "github-actions[bot]"
@@ -82,17 +241,24 @@ jobs:
           git config --global user.email \
             "github-actions[bot]@users.noreply.github.com"
 
-          git add packages/
+          echo "📋 Git Status"
+
+          git status
+
+          git add -A "${PACKAGE_ID}/"
 
           if [[ -n $(git status --porcelain) ]]; then
 
             git commit -m \
-              "Export CPI Package: ${PACKAGE_ID}"
+              "Auto-sync CPI Package: ${PACKAGE_ID} Lifecycle Sync (Build ${GITHUB_RUN_NUMBER})"
+
+            echo "📤 Pushing updates to GitHub..."
 
             git push origin ${BRANCH_NAME}
 
           else
 
-            echo "ℹ️ No package changes detected"
+            echo "ℹ️ Workspace matches CPI perfectly. No changes to commit."
 
           fi
+
