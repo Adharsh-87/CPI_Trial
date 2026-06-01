@@ -4,8 +4,6 @@ on:
   # Allows you to trigger this workflow manually from the Actions tab
   workflow_dispatch: 
 
-  
-
 # Grant permission to write changes back to the repository
 permissions:
   contents: write
@@ -64,7 +62,7 @@ jobs:
             exit 0
           fi
           
-          TARGET_DIR="${{ github.workspace }}/${{ env.PACKAGE_ID }}/IntegrationFlow"
+          TARGET_DIR="${{ github.workspace }}/${{ env.PACKAGE_ID }}/IntegrationFlow" #give the path where you want to store the artifacts in your repo
           mkdir -p "$TARGET_DIR"
           
           for ARTIFACT_ID in $ARTIFACT_IDS; do
