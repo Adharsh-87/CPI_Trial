@@ -1,7 +1,7 @@
 name: Sync SAP CPI Artifacts to Git
 
 on:
-  workflow_dispatch: 
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -21,6 +21,11 @@ jobs:
         with:
           ref: ${{ env.BRANCH_NAME }}
 
+      - name: Install Required Packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq unzip
+
       - name: Fetch and Process CPI Artifacts
         env:
           CLIENT_ID: ${{ secrets.CLIENT_ID }}
@@ -28,84 +33,142 @@ jobs:
           AUTH_URL: ${{ secrets.AUTH_URL }}
         run: |
           set -e
+
           TMP_DIR="/tmp/cpi_sync_$(date +%s)"
           mkdir -p "$TMP_DIR"
-          
+
           echo "🔑 Fetching OAuth token from SAP CPI..."
+
           TOKEN_RESPONSE=$(curl -s -X POST "$AUTH_URL" \
             -u "$CLIENT_ID:$CLIENT_SECRET" \
             -d "grant_type=client_credentials&response_type=token")
-          
+
           ACCESS_TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r '.access_token')
-          
+
           if [ -z "$ACCESS_TOKEN" ] || [ "$ACCESS_TOKEN" == "null" ]; then
-            echo "❌ Error: Failed to fetch access token. Response: $TOKEN_RESPONSE"
+            echo "❌ Failed to fetch access token"
+            echo "Response: $TOKEN_RESPONSE"
             exit 1
           fi
-          
-          echo "📦 Fetching live artifacts list for package: ${{ env.PACKAGE_ID }}..."
+
+          echo "✅ OAuth token fetched successfully"
+
+          echo "📦 Fetching artifacts from CPI package: ${{ env.PACKAGE_ID }}"
+
           API_URL="${{ env.CPI_TMN_HOST }}/api/v1/IntegrationPackages('${{ env.PACKAGE_ID }}')/IntegrationDesigntimeArtifacts"
-          
+
           ARTIFACTS_JSON=$(curl -s -X GET "$API_URL" \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
-            -H "Accept: application/json")
-          
+            -H "Accept: application/json" \
+            -H "Cache-Control: no-cache")
+
           ARTIFACT_IDS=$(echo "$ARTIFACTS_JSON" | jq -r '.d.results[].Id')
-          
+
           TARGET_DIR="${{ github.workspace }}/${{ env.PACKAGE_ID }}/IntegrationFlow"
-          
-          # CRITICAL FOR DELETIONS: Wipe out the local directory first.
-          # If an artifact was deleted in CPI, it won't be re-downloaded, meaning it stays deleted!
-          if [ -dir "$TARGET_DIR" ]; then
-            echo "🧹 Clearing local workspace folder to catch potential deletions..."
+
+          echo "🧹 Cleaning local workspace to detect deletions..."
+
+          if [ -d "$TARGET_DIR" ]; then
             rm -rf "$TARGET_DIR"
           fi
+
           mkdir -p "$TARGET_DIR"
 
           if [ -z "$ARTIFACT_IDS" ] || [ "$ARTIFACT_IDS" == "null" ]; then
-            echo "⚠️ No artifacts currently exist in CPI package ${{ env.PACKAGE_ID }}."
+            echo "⚠️ No artifacts found in CPI package"
           else
+
             for ARTIFACT_ID in $ARTIFACT_IDS; do
-              echo "📥 Processing artifact: $ARTIFACT_ID..."
-              
-              # Step A: Try downloading the DRAFT version (catches modifications)
-              DOWNLOAD_URL="${{ env.CPI_TMN_HOST }}/api/v1/IntegrationDesigntimeArtifacts(Id='$ARTIFACT_ID',Version='draft')/\$value"
-              HTTP_STATUS=$(curl -s -o "$TMP_DIR/$ARTIFACT_ID.zip" -w "%{http_code}" -X GET "$DOWNLOAD_URL" -H "Authorization: Bearer $ACCESS_TOKEN")
-              
-              # Step B: If draft doesn't exist (HTTP 404/400), fall back to the ACTIVE version
-              if [ "$HTTP_STATUS" -ne 200 ]; then
-                echo "ℹ️ No draft found for $ARTIFACT_ID. Fetching active version instead..."
-                DOWNLOAD_URL="${{ env.CPI_TMN_HOST }}/api/v1/IntegrationDesigntimeArtifacts(Id='$ARTIFACT_ID',Version='active')/\$value"
-                curl -s -X GET "$DOWNLOAD_URL" -H "Authorization: Bearer $ACCESS_TOKEN" -o "$TMP_DIR/$ARTIFACT_ID.zip"
-              fi
-              
+
+              echo "--------------------------------------"
+              echo "📥 Processing Artifact: $ARTIFACT_ID"
+
               ARTIFACT_GIT_DIR="$TARGET_DIR/$ARTIFACT_ID"
+
+              # Remove old artifact content completely
+              rm -rf "$ARTIFACT_GIT_DIR"
+
               mkdir -p "$ARTIFACT_GIT_DIR"
-              
-              if [ -f "$TMP_DIR/$ARTIFACT_ID.zip" ] && [ -s "$TMP_DIR/$ARTIFACT_ID.zip" ]; then
-                unzip -q -o "$TMP_DIR/$ARTIFACT_ID.zip" -d "$ARTIFACT_GIT_DIR"
-                echo "✅ Successfully synced $ARTIFACT_ID"
+
+              ZIP_FILE="$TMP_DIR/$ARTIFACT_ID.zip"
+
+              echo "🔄 Attempting DRAFT version download..."
+
+              DOWNLOAD_URL="${{ env.CPI_TMN_HOST }}/api/v1/IntegrationDesigntimeArtifacts(Id='$ARTIFACT_ID',Version='draft')/\$value"
+
+              HTTP_STATUS=$(curl -s \
+                -o "$ZIP_FILE" \
+                -w "%{http_code}" \
+                -X GET "$DOWNLOAD_URL" \
+                -H "Authorization: Bearer $ACCESS_TOKEN" \
+                -H "Cache-Control: no-cache")
+
+              # Fallback to ACTIVE if draft unavailable
+              if [ "$HTTP_STATUS" -ne 200 ]; then
+
+                echo "ℹ️ Draft not available. Fetching ACTIVE version..."
+
+                DOWNLOAD_URL="${{ env.CPI_TMN_HOST }}/api/v1/IntegrationDesigntimeArtifacts(Id='$ARTIFACT_ID',Version='active')/\$value"
+
+                HTTP_STATUS=$(curl -s \
+                  -o "$ZIP_FILE" \
+                  -w "%{http_code}" \
+                  -X GET "$DOWNLOAD_URL" \
+                  -H "Authorization: Bearer $ACCESS_TOKEN" \
+                  -H "Cache-Control: no-cache")
+              fi
+
+              if [ "$HTTP_STATUS" -ne 200 ]; then
+                echo "❌ Failed to download artifact: $ARTIFACT_ID"
+                rm -rf "$ARTIFACT_GIT_DIR"
+                continue
+              fi
+
+              if [ -f "$ZIP_FILE" ] && [ -s "$ZIP_FILE" ]; then
+
+                unzip -q -o "$ZIP_FILE" -d "$ARTIFACT_GIT_DIR"
+
+                echo "✅ Successfully synced: $ARTIFACT_ID"
+
               else
-                echo "❌ Failed to fetch payload bundle for $ARTIFACT_ID"
+
+                echo "❌ ZIP file empty or invalid for: $ARTIFACT_ID"
+
                 rm -rf "$ARTIFACT_GIT_DIR"
               fi
+
             done
           fi
-          
+
+          echo "🧹 Cleaning temporary files..."
           rm -rf "$TMP_DIR"
 
       - name: Commit and Push Changes
         run: |
+
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          
-          # Use -A (or --all) to force Git to record new files, changes, AND deleted files
+
+          echo "📋 Git Status:"
+          git status
+
+          echo "📌 Staging all changes..."
           git add -A "${{ env.PACKAGE_ID }}/"
-          
+
           if [[ -n $(git status --porcelain) ]]; then
+
+            echo "✅ Changes detected. Creating commit..."
+
             git commit -m "Auto-sync CPI Package: ${{ env.PACKAGE_ID }} Lifecycle Sync (Build ${{ github.run_number }})"
+
             echo "📤 Pushing updates to GitHub..."
+
             git push origin ${{ env.BRANCH_NAME }}
+
+            echo "✅ Sync completed successfully"
+
           else
-            echo "ℹ️ Workspace matches CPI perfectly. No changes to commit."
+
+            echo "ℹ️ GitHub already matches CPI. No changes detected."
+
           fi
