@@ -206,8 +206,18 @@ jobs:
 
             echo "Processing: $CURRENT_ARTIFACT"
 
-            ARTIFACT_TYPE=$(echo "$ARTIFACTS_JSON" | jq -r \
-              ".d.results[] | select(.Id==\"$CURRENT_ARTIFACT\") | .ArtifactType")
+            ARTIFACT_OBJ=$(echo "$ARTIFACTS_JSON" | jq -c ".d.results[] | select(.Id==\"$CURRENT_ARTIFACT\")")
+
+            if [ -z "$ARTIFACT_OBJ" ]; then
+              echo "❌ Artifact metadata not found for $CURRENT_ARTIFACT"
+              echo "Raw artifacts JSON entry:"
+              echo "$ARTIFACTS_JSON" | jq -c '.d.results[]'
+              continue
+            fi
+
+            echo "Artifact metadata: $ARTIFACT_OBJ"
+
+            ARTIFACT_TYPE=$(echo "$ARTIFACT_OBJ" | jq -r '.ArtifactType // .artifactType // empty')
 
             if [ -z "$ARTIFACT_TYPE" ] || [ "$ARTIFACT_TYPE" == "null" ]; then
               ARTIFACT_TYPE="UNKNOWN"
@@ -225,7 +235,7 @@ jobs:
                 TARGET_BASE="$ROOT_DIR/API"
                 ;;
 
-              "SCRIPT_COLLECTION")
+              "SCRIPT_COLLECTION" | "SCRIPT_LIBRARY")
                 TARGET_BASE="$ROOT_DIR/ScriptCollection"
                 ;;
 
@@ -255,9 +265,9 @@ jobs:
 
             ZIP_FILE="$TMP_DIR/$CURRENT_ARTIFACT.zip"
 
-            HTTP_STATUS=$(curl -s \
-              -o "$ZIP_FILE" \
-              -w "%{http_code}" \
+            echo "Downloading from: $DOWNLOAD_URL"
+
+            HTTP_STATUS=$(curl -sSL -w "%{http_code}" -o "$ZIP_FILE" \
               -X GET "$DOWNLOAD_URL" \
               -H "Authorization: Bearer $ACCESS_TOKEN")
 
@@ -271,9 +281,7 @@ jobs:
 
               DOWNLOAD_URL="${CPI_TMN_HOST}/api/v1/IntegrationDesigntimeArtifacts(Id='$CURRENT_ARTIFACT',Version='active')/\$value"
 
-              HTTP_STATUS=$(curl -s \
-                -o "$ZIP_FILE" \
-                -w "%{http_code}" \
+              HTTP_STATUS=$(curl -sSL -w "%{http_code}" -o "$ZIP_FILE" \
                 -X GET "$DOWNLOAD_URL" \
                 -H "Authorization: Bearer $ACCESS_TOKEN")
 
@@ -282,9 +290,11 @@ jobs:
             if [ "$HTTP_STATUS" -ne 200 ]; then
 
               echo "Failed to download artifact"
-
+              echo "URL: $DOWNLOAD_URL"
+              echo "HTTP_STATUS: $HTTP_STATUS"
+              echo "Response preview:"
+              head -c 1024 "$ZIP_FILE" | cat
               rm -rf "$ARTIFACT_DIR"
-
               continue
 
             fi
