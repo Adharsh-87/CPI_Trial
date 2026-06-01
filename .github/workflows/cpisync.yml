@@ -233,13 +233,20 @@ jobs:
 
             echo "Artifact metadata: $ARTIFACT_OBJ"
 
-            ARTIFACT_TYPE=$(echo "$ARTIFACT_OBJ" | jq -r '.ArtifactType // .artifactType // empty' | tr '[:lower:]' '[:upper:]' | tr ' -' '_' | tr -d '\r')
+            ARTIFACT_TYPE=$(echo "$ARTIFACT_OBJ" | jq -r '.ArtifactType // .artifactType // .Type // empty' | tr '[:lower:]' '[:upper:]' | tr ' -' '_' | tr -d '\r')
 
             if [ -z "$ARTIFACT_TYPE" ] || [ "$ARTIFACT_TYPE" == "null" ]; then
-              ARTIFACT_TYPE="UNKNOWN"
+              ARTIFACT_NAME_LOWER=$(echo "$ARTIFACT_OBJ" | jq -r '.Name // .Id // empty' | tr '[:upper:]' '[:lower:]')
+              if echo "$ARTIFACT_NAME_LOWER" | grep -q 'script'; then
+                ARTIFACT_TYPE="SCRIPT_COLLECTION"
+                echo "Inferred artifact type: SCRIPT_COLLECTION from artifact name"
+              else
+                ARTIFACT_TYPE="UNKNOWN"
+              fi
             fi
 
             echo "Artifact Type: $ARTIFACT_TYPE"
+            echo "Artifact classification: $ACTUAL_ARTIFACT_ID -> $ARTIFACT_TYPE"
 
             case "$ARTIFACT_TYPE" in
 
