@@ -75,9 +75,9 @@ jobs:
 
       - name: Fetch OAuth Token
         env:
-          CLIENT_ID: ${{ secrets.CLIENT_ID }}
-          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
-          AUTH_URL: ${{ secrets.AUTH_URL }}
+          CLIENT_ID: "sb-b25ec569-01c1-40b6-adfa-efa34fbd6d4f!b624197|it!b55215"
+          CLIENT_SECRET: "866a832d-d5df-4f91-b4c5-73743db21137$I8VSplLvTugKiZecAbCOWb1xNvWIHOxl3C7IPyMITCo="
+          AUTH_URL: "https://3503bcbdtrial.authentication.us10.hana.ondemand.com/oauth/token"
 
         run: |
 
@@ -107,7 +107,7 @@ jobs:
       - name: Fetch CPI Artifacts
 
         env:
-          CPI_TMN_HOST: ${{ secrets.CPI_TMN_HOST || secrets.CPI_HOST }}
+          CPI_TMN_HOST: "https://3503bcbdtrial.it-cpitrial06.cfapps.us10-001.hana.ondemand.com"
 
         run: |
 
