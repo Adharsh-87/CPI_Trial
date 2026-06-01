@@ -87,13 +87,15 @@ jobs:
           
           rm -rf "$TMP_DIR"
 
-      - name: Commit and Push Changes
+     - name: Commit and Push Changes
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
+          # Force Git to track modifications, creations, and deletions inside the package directory
+          git add "${{ env.PACKAGE_ID }}/"
+          
           if [[ -n $(git status --porcelain) ]]; then
-            git add "${{ env.PACKAGE_ID }}/"
             git commit -m "Auto-sync CPI Package: ${{ env.PACKAGE_ID }} (Build ${{ github.run_number }})"
             echo "📤 Pushing updates to GitHub..."
             git push origin ${{ env.BRANCH_NAME }}
