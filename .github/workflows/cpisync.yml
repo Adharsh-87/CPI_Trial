@@ -87,6 +87,7 @@ jobs:
 
           TOKEN_RESPONSE=$(curl -s -X POST "$AUTH_URL" \
             -u "$CLIENT_ID:$CLIENT_SECRET" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
             -d "grant_type=client_credentials")
 
           ACCESS_TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r '.access_token')
@@ -106,7 +107,7 @@ jobs:
       - name: Fetch CPI Artifacts
 
         env:
-          CPI_TMN_HOST: ${{ secrets.CPI_HOST }}
+          CPI_TMN_HOST: ${{ secrets.CPI_TMN_HOST || secrets.CPI_HOST }}
 
         run: |
 
@@ -124,22 +125,33 @@ jobs:
           mkdir -p "$TMP_DIR"
 
           echo "Package ID: $PACKAGE_ID"
+          echo "Using CPI host: $CPI_TMN_HOST"
 
           API_URL="${CPI_TMN_HOST}/api/v1/IntegrationPackages('${PACKAGE_ID}')/IntegrationDesigntimeArtifacts"
 
           echo "Fetching package artifacts..."
 
-          ARTIFACTS_RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X GET "$API_URL" \
+          ARTIFACTS_RESPONSE=$(curl -sSL -w "\nHTTP_STATUS:%{http_code}\nCONTENT_TYPE:%{content_type}" -X GET "$API_URL" \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
             -H "Accept: application/json")
 
           ARTIFACTS_HTTP_STATUS=$(echo "$ARTIFACTS_RESPONSE" | tail -n1 | sed 's/HTTP_STATUS://')
-          ARTIFACTS_JSON=$(echo "$ARTIFACTS_RESPONSE" | sed '$d')
+          ARTIFACTS_CONTENT_TYPE=$(echo "$ARTIFACTS_RESPONSE" | tail -n2 | head -n1 | sed 's/CONTENT_TYPE://')
+          ARTIFACTS_JSON=$(echo "$ARTIFACTS_RESPONSE" | sed '$d' | sed '$d')
 
           echo "Artifact fetch HTTP status: $ARTIFACTS_HTTP_STATUS"
+          echo "Artifact fetch Content-Type: $ARTIFACTS_CONTENT_TYPE"
 
           if [ "$ARTIFACTS_HTTP_STATUS" != "200" ]; then
             echo "❌ Failed to fetch package artifacts"
+            echo "$ARTIFACTS_JSON"
+            exit 1
+          fi
+
+          if [[ "$ARTIFACTS_CONTENT_TYPE" == text/html* ]]; then
+            echo "❌ CPI host returned HTML content instead of JSON. This usually means the host is wrong or the token is not valid for the API endpoint."
+            echo "CPI host: $CPI_TMN_HOST"
+            echo "API URL: $API_URL"
             echo "$ARTIFACTS_JSON"
             exit 1
           fi
