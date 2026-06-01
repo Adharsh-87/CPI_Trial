@@ -1,7 +1,6 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<projectDescription>
-	<name>iflow-Testcontentmodifier</name>
-	<comment></comment>
+<?xml version="1.0" encoding="UTF-8"?><projectDescription>
+	<name>Testcontentmodifier</name>
+	<comment/>
 	<projects>
 	</projects>
 	<buildSpec>
@@ -23,7 +22,7 @@
 	<filteredResources>
 		<filter>
 			<id>1780222220891</id>
-			<name></name>
+			<name/>
 			<type>30</type>
 			<matcher>
 				<id>org.eclipse.core.resources.regexFilterMatcher</id>
