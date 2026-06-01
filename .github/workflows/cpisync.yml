@@ -131,13 +131,13 @@ jobs:
 
           echo "Fetching package artifacts..."
 
-          ARTIFACTS_RESPONSE=$(curl -sSL -w "\nHTTP_STATUS:%{http_code}\nCONTENT_TYPE:%{content_type}" -X GET "$API_URL" \
+          ARTIFACTS_RESPONSE=$(curl -sSL -w "\n__HTTP_STATUS__:%{http_code}\n__CONTENT_TYPE__:%{content_type}" -X GET "$API_URL" \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
             -H "Accept: application/json")
 
-          ARTIFACTS_HTTP_STATUS=$(echo "$ARTIFACTS_RESPONSE" | tail -n1 | sed 's/HTTP_STATUS://')
-          ARTIFACTS_CONTENT_TYPE=$(echo "$ARTIFACTS_RESPONSE" | tail -n2 | head -n1 | sed 's/CONTENT_TYPE://')
-          ARTIFACTS_JSON=$(echo "$ARTIFACTS_RESPONSE" | sed '$d' | sed '$d')
+          ARTIFACTS_HTTP_STATUS=$(printf '%s\n' "$ARTIFACTS_RESPONSE" | grep '^__HTTP_STATUS__:' | sed 's/^__HTTP_STATUS__://')
+          ARTIFACTS_CONTENT_TYPE=$(printf '%s\n' "$ARTIFACTS_RESPONSE" | grep '^__CONTENT_TYPE__:' | sed 's/^__CONTENT_TYPE__://')
+          ARTIFACTS_JSON=$(printf '%s\n' "$ARTIFACTS_RESPONSE" | sed '/^__HTTP_STATUS__:/d' | sed '/^__CONTENT_TYPE__:/d')
 
           echo "Artifact fetch HTTP status: $ARTIFACTS_HTTP_STATUS"
           echo "Artifact fetch Content-Type: $ARTIFACTS_CONTENT_TYPE"
