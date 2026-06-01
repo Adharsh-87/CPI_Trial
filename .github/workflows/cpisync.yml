@@ -1,7 +1,9 @@
 name: Sync SAP CPI Artifacts to Git
 
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - CPI-Main
 
 permissions:
   contents: write
