@@ -81,7 +81,7 @@ jobs:
 
           ARTIFACT_IDS=$(echo "$ARTIFACTS_JSON" | jq -r '.d.results[].Id')
 
-          TARGET_DIR="${GITHUB_WORKSPACE}/${PACKAGE_ID}/IntegrationFlow"
+          TARGET_DIR="${GITHUB_WORKSPACE}/${PACKAGE_ID}/"
 
           # CRITICAL FOR DELETIONS
           if [ -d "$TARGET_DIR" ]; then
