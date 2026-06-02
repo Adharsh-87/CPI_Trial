@@ -1,7 +1,7 @@
 Manifest-Version: 1.0
 Bundle-ManifestVersion: 2
-Bundle-Name: Git_Trial_Draft
-Bundle-SymbolicName: Git_Trial_Draft; singleton:=true
+Bundle-Name: ContentModifier3
+Bundle-SymbolicName: ContentModifier3; singleton:=true
 Bundle-Version: 1.0.0
 SAP-BundleType: IntegrationFlow
 SAP-NodeType: IFLMAP
@@ -28,6 +28,6 @@ Import-Package: com.sap.esb.application.services.cxf.interceptor,com.sap
  el.spi,com.sap.esb.webservice.audit.log,com.sap.esb.camel.endpoint.conf
  igurator.api,com.sap.esb.camel.jdbc.idempotency.reorg,javax.sql,org.apa
  che.camel.processor.idempotent.jdbc,org.osgi.service.blueprint
-Origin-Bundle-Name: Git_Trial_Draft
-Origin-Bundle-SymbolicName: Git_Trial_Draft
+Origin-Bundle-Name: ContentModifier3
+Origin-Bundle-SymbolicName: ContentModifier3
 
