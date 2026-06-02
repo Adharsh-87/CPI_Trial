@@ -1,4 +1,4 @@
-name: Deploy CPI Artifacts
+name: Deploy CPI Artifact
 
 on:
   push:
