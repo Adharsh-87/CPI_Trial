@@ -14,16 +14,16 @@ jobs:
 
     steps:
 
-      # ==========================================================
+      # =========================================================
       # CHECKOUT REPOSITORY
-      # ==========================================================
+      # =========================================================
 
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # ==========================================================
+      # =========================================================
       # LOAD CONFIG VARIABLES
-      # ==========================================================
+      # =========================================================
 
       - name: Load Config Variables
         run: |
@@ -45,9 +45,9 @@ jobs:
 
           done < "$CONFIG_FILE"
 
-      # ==========================================================
+      # =========================================================
       # INSTALL REQUIRED PACKAGES
-      # ==========================================================
+      # =========================================================
 
       - name: Install Required Packages
         run: |
@@ -55,9 +55,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y zip jq curl
 
-      # ==========================================================
+      # =========================================================
       # DEPLOY TO SAP CPI
-      # ==========================================================
+      # =========================================================
 
       - name: Deploy Artifacts to SAP CPI
 
@@ -91,9 +91,9 @@ jobs:
 
           echo "✅ OAuth token fetched"
 
-          # ==========================================================
-          # VERIFY CPI ACCESS
-          # ==========================================================
+          # =========================================================
+          # VERIFY CPI API ACCESS
+          # =========================================================
 
           echo "🔍 Testing CPI API access..."
 
@@ -116,9 +116,9 @@ jobs:
 
           echo "📦 Reading artifacts from: $ARTIFACT_ROOT"
 
-          # ==========================================================
+          # =========================================================
           # PROCESS EACH ARTIFACT
-          # ==========================================================
+          # =========================================================
 
           for ARTIFACT_DIR in "$ARTIFACT_ROOT"/*; do
 
@@ -128,14 +128,14 @@ jobs:
 
             ZIP_FILE="/tmp/${ARTIFACT_ID}.zip"
 
-            echo "------------------------------------------"
+            echo "------------------------------------------------"
             echo "📥 Processing artifact: $ARTIFACT_ID"
 
             rm -f "$ZIP_FILE"
 
-            # ==========================================================
+            # =========================================================
             # CREATE ZIP PACKAGE
-            # ==========================================================
+            # =========================================================
 
             echo "🗜️ Creating ZIP package..."
 
@@ -153,50 +153,44 @@ jobs:
 
             CONTENT=$(base64 -w 0 "$ZIP_FILE")
 
-            # ==========================================================
-            # CHECK WHETHER ARTIFACT EXISTS
-            # ==========================================================
+            # =========================================================
+            # TRY UPDATE FIRST
+            # =========================================================
 
-            echo "🔍 Checking whether artifact exists in CPI..."
+            echo "♻️ Attempting UPDATE..."
 
-            CHECK_RESPONSE=$(curl -s \
-              "$CPI_HOST/api/v1/IntegrationDesigntimeArtifacts?\$filter=Id%20eq%20'$ARTIFACT_ID'" \
+            RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" \
+              -X PUT \
+              "$CPI_HOST/api/v1/IntegrationDesigntimeArtifacts(Id='$ARTIFACT_ID',Version='active')" \
               -H "Authorization: Bearer $TOKEN" \
-              -H "Accept: application/json")
+              -H "Content-Type: application/json" \
+              -d "{
+                \"Name\": \"$ARTIFACT_ID\",
+                \"PackageId\": \"$PACKAGE_ID\",
+                \"ArtifactContent\": \"$CONTENT\"
+              }")
 
-            echo "📄 CPI Check Response:"
-            echo "$CHECK_RESPONSE"
+            STATUS=$(echo "$RESPONSE" | grep HTTP_STATUS | cut -d: -f2)
 
-            EXISTS=$(echo "$CHECK_RESPONSE" | jq '(.d.results // .value // []) | length')
+            echo "$RESPONSE"
 
-            echo "📌 Artifact Exists Count: $EXISTS"
+            # =========================================================
+            # UPDATE SUCCESS
+            # =========================================================
 
-            # ==========================================================
-            # UPDATE EXISTING ARTIFACT
-            # ==========================================================
+            if [ "$STATUS" = "200" ] || \
+               [ "$STATUS" = "201" ] || \
+               [ "$STATUS" = "202" ]; then
 
-            if [ "$EXISTS" -gt 0 ]; then
-
-              echo "♻️ Artifact exists. Updating..."
-
-              RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" \
-                -X PUT \
-                "$CPI_HOST/api/v1/IntegrationDesigntimeArtifacts(Id='$ARTIFACT_ID',Version='active')" \
-                -H "Authorization: Bearer $TOKEN" \
-                -H "Content-Type: application/json" \
-                -d "{
-                  \"Name\": \"$ARTIFACT_ID\",
-                  \"PackageId\": \"$PACKAGE_ID\",
-                  \"ArtifactContent\": \"$CONTENT\"
-                }")
-
-            # ==========================================================
-            # CREATE NEW / RESTORE DELETED ARTIFACT
-            # ==========================================================
+              echo "✅ UPDATE successful"
 
             else
 
-              echo "🆕 Artifact not found. Creating..."
+              echo "⚠️ UPDATE failed. Trying CREATE..."
+
+              # =====================================================
+              # TRY CREATE
+              # =====================================================
 
               RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" \
                 -X POST \
@@ -210,28 +204,55 @@ jobs:
                   \"ArtifactContent\": \"$CONTENT\"
                 }")
 
+              STATUS=$(echo "$RESPONSE" | grep HTTP_STATUS | cut -d: -f2)
+
+              echo "$RESPONSE"
+
+              # =====================================================
+              # HANDLE "ALREADY EXISTS"
+              # =====================================================
+
+              if echo "$RESPONSE" | grep -qi "already exists"; then
+
+                echo "⚠️ Artifact already exists as draft/inactive"
+
+                echo "🔁 Retrying UPDATE..."
+
+                RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" \
+                  -X PUT \
+                  "$CPI_HOST/api/v1/IntegrationDesigntimeArtifacts(Id='$ARTIFACT_ID',Version='active')" \
+                  -H "Authorization: Bearer $TOKEN" \
+                  -H "Content-Type: application/json" \
+                  -d "{
+                    \"Name\": \"$ARTIFACT_ID\",
+                    \"PackageId\": \"$PACKAGE_ID\",
+                    \"ArtifactContent\": \"$CONTENT\"
+                  }")
+
+                STATUS=$(echo "$RESPONSE" | grep HTTP_STATUS | cut -d: -f2)
+
+                echo "$RESPONSE"
+
+              fi
+
+              # =====================================================
+              # FINAL VALIDATION
+              # =====================================================
+
+              if [ "$STATUS" != "200" ] && \
+                 [ "$STATUS" != "201" ] && \
+                 [ "$STATUS" != "202" ]; then
+
+                echo "❌ Artifact create/update failed"
+                exit 1
+
+              fi
+
             fi
 
-            STATUS=$(echo "$RESPONSE" | grep HTTP_STATUS | cut -d: -f2)
-
-            echo "$RESPONSE"
-
-            # ==========================================================
-            # VALIDATE CREATE / UPDATE RESPONSE
-            # ==========================================================
-
-            if [ "$STATUS" != "200" ] && \
-               [ "$STATUS" != "201" ] && \
-               [ "$STATUS" != "202" ]; then
-
-              echo "❌ Artifact create/update failed"
-              exit 1
-
-            fi
-
-            # ==========================================================
+            # =========================================================
             # DEPLOY ARTIFACT
-            # ==========================================================
+            # =========================================================
 
             echo "🚀 Deploying artifact..."
 
