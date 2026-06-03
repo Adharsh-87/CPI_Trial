@@ -1,0 +1,18 @@
+#Wed Jun 03 08:39:20 UTC 2026
+Event=Select either Create or Update file contents in GitHub. Allowed values\: create,update
+GitHubOwnerName=The account owner of Github Repository
+GitHubRepositoryName=The name of the Github Repository without the .git extension
+GithHubAccessToken=Set the name of the credential created in Security Material to store Github Personal Access Token
+GithubCommitMsg=Commit message
+HostAddress=Hostname of Process Integration Runtime Service | API Plan \u2013 you find this value in BTP Cockpit of your Cloud Integration subscription
+IntegrationFlowId=Integration flow IDs to be included in the extract (comma-separated values)
+IntegrationPackageId=Integration Package IDs to be included in the extract (comma-separated values)
+OAuthCredential=Set the name of the Credential created in Security Material for SAP CI ODATA V2 API authentication
+Scheduler=<row><cell>dateType</cell><cell></cell></row><row><cell>timeType</cell><cell></cell></row><row><cell>dayValue</cell><cell></cell></row><row><cell>monthValue</cell><cell></cell></row><row><cell>yearValue</cell><cell></cell></row><row><cell>onWeekly</cell><cell></cell></row><row><cell>onMonthly</cell><cell></cell></row><row><cell>OnEveryMinute</cell><cell></cell></row><row><cell>fromInterval</cell><cell></cell></row><row><cell>toInterval</cell><cell></cell></row><row><cell>timeZone</cell><cell>( UTC 0\:00 ) Greenwich Mean Time(Etc/GMT)</cell></row><row><cell>secondValue</cell><cell>0</cell></row><row><cell>minutesValue</cell><cell></cell></row><row><cell>hourValue</cell><cell></cell></row><row><cell>triggerType</cell><cell>simple</cell></row><row><cell>noOfSchedules</cell><cell>1</cell></row><row><cell>schedule1</cell><cell>fireNow\=true</cell></row>
+SelectArtifactType=Select Integration Content Type to Sync to GitHub. Allowed values\: all,pkg,ifl,vmp
+SendTeamsNotification=Do you want to send Notification to your Microsoft Teams channel? Allowed Value\: yes or no
+Skip=Skip the first n Packages from Sync (Leave Blank or give an Integer Value)
+Top=Sync only the first n Packages (Leave Blank or give an Integer Value)
+UploadFileType=Upload to Github as Zip or Unzip File. Allowed values\: zip,unzip
+ValueMappingId's=Value Mapping IDs to be included in the extract (comma-separated values)
+WebhookAddress=Incoming Webhook Address of your Microsoft Teams channel

@@ -1,0 +1,11 @@
+#Wed Jun 03 08:39:22 UTC 2026
+GitHubOwnerName=The account owner of Github Repository
+GitHubPath=GitHub Path to the location of the file - relative to root of the repository. Note\: If SelectArtifactType \= &apos;resources&apos; only, then you can add multiple paths (comma-separated values)
+GitHubRepositoryName=The name of the Github Repository without the .git extension
+GithHubAccessToken=Set the name of the credential created in Security Material to store Github Personal Access Token
+HostAddress=Hostname of Process Integration Runtime Service | API Plan \u2013 you find this value in BTP Cockpit of your Cloud Integration subscription
+IntegrationFlowId=Integration flow Id to be uploaded from GitHub Repo to the SAP Cloud Integration tenant
+IntegrationFlowName=Integration flow Name to be uploaded from GitHub Repo to the SAP Cloud Integration tenant
+IntegrationPackageId=Integration Package Id of the Integration flow to be uploaded from GitHub Repo to the SAP Cloud Integration tenant
+OAuthCredential=Set the name of the Credential created in Security Material for SAP CI ODATA V2 API authentication
+SelectArtifactType=Select Integration Content Type from GitHub Repo to be uploaded to the tenant. Allowed values\: iflow or resources
