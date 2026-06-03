@@ -10,7 +10,7 @@ on:
         type: string
 
       ARTIFACT_TYPE:
-        description: "Choose artifact type. Select 'All' to sync every artifact type."
+        description: "ARTIFACT_TYPE:(Select 'All' to sync all artifacts)"
         required: true
         default: "Integration Flow"
         type: choice
@@ -22,7 +22,7 @@ on:
           - All
 
       SYNC_MODE:
-        description: "Required only when ARTIFACT_TYPE is not 'All'"
+        description: "SYNC_MODE:(Required only when ARTIFACT_TYPE is not 'All')"
         required: false
         default: "ALL"
         type: choice
@@ -31,12 +31,12 @@ on:
           - SINGLE
 
       ARTIFACT_ID:
-        description: "Required only when SYNC_MODE=SINGLE"
+        description: "ARTIFACT_ID:(Required only when SYNC_MODE=SINGLE)"
         required: false
         type: string
 
       BRANCH_NAME:
-        description: "Target Git Branch"
+        description: "BRANCH_NAME:(Target Git Branch)"
         required: true
         type: string
 
