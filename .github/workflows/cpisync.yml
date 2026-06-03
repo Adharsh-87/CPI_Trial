@@ -22,7 +22,7 @@ on:
           - all
 
       SYNC_MODE:
-        description: "Sync Mode"
+        description: "Sync Mode (Select 'All' if Artifact Type=all)"
         required: true
         default: "ALL"
         type: choice
@@ -51,13 +51,13 @@ jobs:
     steps:
 
       # ============================================
-      # CHECKOUT TARGET BRANCH
+      # CHECKOUT REPOSITORY
       # ============================================
 
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.BRANCH_NAME }}
+          fetch-depth: 0
 
       # ============================================
       # LOAD CONFIG VARIABLES
@@ -120,13 +120,12 @@ jobs:
           ARTIFACT_ID_INPUT="${{ github.event.inputs.ARTIFACT_ID }}"
           BRANCH_NAME="${{ github.event.inputs.BRANCH_NAME }}"
 
-         
           # ============================================
-          # VALIDATE INPUT COMBINATION
+          # VALIDATE INPUT COMBINATIONS
           # ============================================
 
           if [ "$ARTIFACT_TYPE" = "all" ] && \
-            [ "$SYNC_MODE" = "SINGLE" ]; then
+             [ "$SYNC_MODE" = "SINGLE" ]; then
 
             echo "❌ Invalid selection"
 
@@ -136,9 +135,74 @@ jobs:
 
           fi
 
+          # ============================================
+          # VALIDATE SINGLE MODE INPUT
+          # ============================================
+
+          if [ "$SYNC_MODE" = "SINGLE" ] && \
+             [ -z "$ARTIFACT_ID_INPUT" ]; then
+
+            echo "❌ ARTIFACT_ID is required for SINGLE mode"
+
+            exit 1
+
+          fi
+
+          # ============================================
+          # VALIDATE ARTIFACT TYPE
+          # ============================================
+
+          case "$ARTIFACT_TYPE" in
+
+            iflow|valuemapping|messagemapping|scriptcollection|all)
+
+              echo "✅ Valid artifact type"
+
+              ;;
+
+            *)
+
+              echo "❌ Invalid artifact type: ${ARTIFACT_TYPE}"
+
+              exit 1
+
+              ;;
+
+          esac
+
+          # ============================================
+          # VALIDATE TARGET BRANCH EXISTS
+          # ============================================
+
+          echo "🔍 Validating target branch: ${BRANCH_NAME}"
+
+          if git ls-remote --exit-code --heads origin "${BRANCH_NAME}" > /dev/null; then
+
+            echo "✅ Branch exists: ${BRANCH_NAME}"
+
+          else
+
+            echo "❌ Target branch not found: ${BRANCH_NAME}"
+
+            exit 1
+
+          fi
+
+          # ============================================
+          # CHECKOUT TARGET BRANCH
+          # ============================================
+
+          echo "📂 Checking out branch: ${BRANCH_NAME}"
+
+          git checkout "${BRANCH_NAME}"
+
           TMP_DIR="/tmp/cpi_sync_$(date +%s)"
 
           mkdir -p "$TMP_DIR"
+
+          # ============================================
+          # FETCH OAUTH TOKEN
+          # ============================================
 
           echo "🔑 Fetching OAuth token from SAP CPI..."
 
@@ -148,7 +212,8 @@ jobs:
 
           ACCESS_TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r '.access_token')
 
-          if [ -z "$ACCESS_TOKEN" ] || [ "$ACCESS_TOKEN" == "null" ]; then
+          if [ -z "$ACCESS_TOKEN" ] || \
+             [ "$ACCESS_TOKEN" == "null" ]; then
 
             echo "❌ Failed to fetch access token"
 
@@ -195,7 +260,6 @@ jobs:
           process_artifact_type () {
 
             ARTIFACT_FOLDER=$1
-
             API_ENTITY=$2
 
             echo "--------------------------------------------"
@@ -283,7 +347,7 @@ jobs:
 
               if [ "$HTTP_STATUS" -ne 200 ]; then
 
-                echo "ℹ️ Draft version not found for $ARTIFACT_ID"
+                echo "ℹ️ Draft version not found"
 
                 echo "🔍 Checking ACTIVE version..."
 
@@ -301,14 +365,14 @@ jobs:
               fi
 
               # ============================================
-              # FINAL DOWNLOAD FAILURE
+              # FINAL FAILURE
               # ============================================
 
               if [ "$HTTP_STATUS" -ne 200 ]; then
 
                 echo "❌ Failed to fetch artifact: $ARTIFACT_ID"
 
-                echo "ℹ️ Neither DRAFT nor ACTIVE version exists"
+                echo "ℹ️ Neither draft nor active version exists"
 
                 rm -rf "$ARTIFACT_GIT_DIR"
 
@@ -316,7 +380,7 @@ jobs:
 
               fi
 
-              echo "✅ Found ${ARTIFACT_VERSION} version for $ARTIFACT_ID"
+              echo "✅ Found ${ARTIFACT_VERSION} version"
 
               # ============================================
               # UNZIP ARTIFACT
@@ -446,7 +510,7 @@ jobs:
 
             echo "📤 Pushing updates to GitHub..."
 
-            git push origin ${BRANCH_NAME}
+            git push origin "${BRANCH_NAME}"
 
             echo "✅ Sync completed successfully"
 
@@ -455,3 +519,4 @@ jobs:
             echo "ℹ️ No changes detected."
 
           fi
+
