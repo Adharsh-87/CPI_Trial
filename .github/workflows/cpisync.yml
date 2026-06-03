@@ -22,7 +22,7 @@ on:
           - all
 
       SYNC_MODE:
-        description: "Sync Mode (Select 'All' if Artifact Type=all)"
+        description: "Sync Mode (You Must Select 'All' if Artifact Type=all)"
         required: true
         default: "ALL"
         type: choice
