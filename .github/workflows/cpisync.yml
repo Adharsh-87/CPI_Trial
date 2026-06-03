@@ -10,7 +10,7 @@ on:
         type: string
 
       ARTIFACT_TYPE:
-        description: "Artifact Type"
+        description: "Artifact Type(Select 'All' to sync all artifacts)"
         required: true
         default: "Integration Flow"
         type: choice
@@ -22,7 +22,7 @@ on:
           - All
 
       SYNC_MODE:
-        description: "Sync Mode"
+        description: "Sync Mode(Required only if ARTIFACT_TYPE is not 'All')"
         required: true
         default: "ALL"
         type: choice
@@ -31,14 +31,13 @@ on:
           - SINGLE
 
       ARTIFACT_ID:
-        description: "Artifact ID (Required for SINGLE mode)"
+        description: "Artifact ID (Required only if SYNC_MODE is SINGLE)"
         required: false
         type: string
 
       BRANCH_NAME:
         description: "Target Git Branch"
         required: true
-        default: "CPI-Main"
         type: string
 
 permissions:
