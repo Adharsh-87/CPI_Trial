@@ -172,11 +172,12 @@ jobs:
 
           echo "✅ CPI API access verified"
 
+
           # =========================================================
-          # VALIDATE PACKAGE EXISTS
+          # VALIDATE / CREATE PACKAGE
           # =========================================================
 
-          echo "🔍 Validating package: $PACKAGE_ID"
+          echo "🔍 Checking package: $PACKAGE_ID"
 
           ENCODED_PACKAGE_ID=$(printf '%s' "$PACKAGE_ID" | sed 's/ /%20/g')
 
@@ -188,15 +189,59 @@ jobs:
             -H "Authorization: Bearer $TOKEN" \
             -H "Accept: application/json")
 
-          if [ "$PACKAGE_STATUS" != "200" ]; then
+          # =========================================================
+          # PACKAGE EXISTS
+          # =========================================================
 
-            echo "❌ Package not found in CPI: $PACKAGE_ID"
+          if [ "$PACKAGE_STATUS" = "200" ]; then
+
+            echo "✅ Package exists in CPI"
+
+          # =========================================================
+          # CREATE PACKAGE
+          # =========================================================
+
+          elif [ "$PACKAGE_STATUS" = "404" ]; then
+
+            echo "⚠️ Package not found in CPI"
+
+            echo "📦 Creating package: $PACKAGE_ID"
+
+            CREATE_RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" \
+              -X POST \
+              "$CPI_HOST/api/v1/IntegrationPackages" \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "{
+                \"Id\": \"$PACKAGE_ID\",
+                \"Name\": \"$PACKAGE_ID\",
+                \"ShortText\": \"$PACKAGE_ID\",
+                \"Version\": \"1.0.0\"
+              }")
+
+            CREATE_STATUS=$(echo "$CREATE_RESPONSE" | grep HTTP_STATUS | cut -d: -f2)
+
+            echo "$CREATE_RESPONSE"
+
+            if [ "$CREATE_STATUS" != "201" ] && \
+              [ "$CREATE_STATUS" != "200" ]; then
+
+              echo "❌ Package creation failed"
+
+              exit 1
+
+            fi
+
+            echo "✅ Package created successfully"
+
+          else
+
+            echo "❌ Failed checking package"
 
             exit 1
 
           fi
 
-          echo "✅ Package exists"
 
           # =========================================================
           # SET ARTIFACT ROOT
