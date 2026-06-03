@@ -22,7 +22,7 @@ on:
           - all
 
       SYNC_MODE:
-        description: "Sync Mode (You Must Select 'All' if Artifact Type=all)"
+        description: "Sync Mode"
         required: true
         default: "ALL"
         type: choice
@@ -119,6 +119,12 @@ jobs:
           SYNC_MODE="${{ github.event.inputs.SYNC_MODE }}"
           ARTIFACT_ID_INPUT="${{ github.event.inputs.ARTIFACT_ID }}"
           BRANCH_NAME="${{ github.event.inputs.BRANCH_NAME }}"
+
+          # ============================================
+          # URL ENCODE PACKAGE ID
+          # ============================================
+
+          ENCODED_PACKAGE_ID=$(printf '%s' "$PACKAGE_ID" | sed 's/ /%20/g')
 
           # ============================================
           # VALIDATE INPUT COMBINATIONS
@@ -235,7 +241,7 @@ jobs:
             -o /dev/null \
             -w "%{http_code}" \
             -X GET \
-            "${CPI_TMN_HOST}/api/v1/IntegrationPackages('${PACKAGE_ID}')" \
+            "${CPI_TMN_HOST}/api/v1/IntegrationPackages('${ENCODED_PACKAGE_ID}')" \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
             -H "Accept: application/json")
 
@@ -266,7 +272,7 @@ jobs:
 
             echo "📦 Processing Artifact Type: $ARTIFACT_FOLDER"
 
-            API_URL="${CPI_TMN_HOST}/api/v1/IntegrationPackages('${PACKAGE_ID}')/${API_ENTITY}"
+            API_URL="${CPI_TMN_HOST}/api/v1/IntegrationPackages('${ENCODED_PACKAGE_ID}')/${API_ENTITY}"
 
             ARTIFACTS_JSON=$(curl -s -X GET "$API_URL" \
               -H "Authorization: Bearer $ACCESS_TOKEN" \
@@ -519,4 +525,3 @@ jobs:
             echo "ℹ️ No changes detected."
 
           fi
-
