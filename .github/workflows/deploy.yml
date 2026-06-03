@@ -1,4 +1,4 @@
-name: Deploy CPI Artifact
+name: Deploy Github Artifacts to SAP CPI
 
 on:
   push:
