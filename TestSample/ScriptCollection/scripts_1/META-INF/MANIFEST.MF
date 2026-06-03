@@ -1,0 +1,12 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: scripts_1
+Bundle-SymbolicName: scripts_1
+Bundle-Version: 1.0.0
+SAP-BundleType: ScriptCollection
+SAP-NodeType: IFLMAP
+Import-Package: org.osgi.framework
+Provide-Capability: scriptcollection.scripts_1;version:Version="1.0.0"
+Origin-Bundle-Name: scripts_1
+Origin-Bundle-SymbolicName: scripts_1
+
