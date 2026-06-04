@@ -5,7 +5,7 @@ on:
     inputs:
 
       PACKAGE_ID:
-        description: "SAP CPI Package ID"
+        description: "GitHub Package ID"
         required: true
         type: string
 
