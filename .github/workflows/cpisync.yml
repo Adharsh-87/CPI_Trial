@@ -1,526 +1,1051 @@
-name: Sync SAP CPI Artifacts to Git
+name: Sync SAP CPI Artifacts to Git 
 
-on:
-  workflow_dispatch:
-    inputs:
+on: 
 
-      PACKAGE_ID:
-        description: "SAP CPI Package ID"
-        required: true
-        type: string
+  workflow_dispatch: 
 
-      ARTIFACT_TYPE:
-        description: "Artifact Type(Select 'All' to sync all artifacts)"
-        required: true
-        default: "Integration Flow"
-        type: choice
-        options:
-          - Integration Flow
-          - Value Mapping
-          - Message Mapping
-          - Script Collection
-          - All
+    inputs: 
 
-      SYNC_MODE:
-        description: "Sync Mode(Required only if ARTIFACT_TYPE is not 'All')"
-        required: true
-        default: "ALL"
-        type: choice
-        options:
-          - ALL
-          - SINGLE
+ 
 
-      ARTIFACT_ID:
-        description: "Artifact ID (Required only if SYNC_MODE is SINGLE)"
-        required: false
-        type: string
+      PACKAGE_ID: 
 
-      BRANCH_NAME:
-        description: "Target Git Branch"
-        required: true
-        type: string
+        description: "SAP CPI Package ID" 
 
-permissions:
-  contents: write
+        required: true 
 
-jobs:
-  sync-artifacts:
-    runs-on: ubuntu-latest
+        type: string 
 
-    steps:
+ 
 
-      # ============================================
-      # CHECKOUT REPOSITORY
-      # ============================================
+      ARTIFACT_TYPE: 
 
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+        description: "Artifact Type (Select 'All' to sync all artifacts)" 
 
-      # ============================================
-      # LOAD CONFIG VARIABLES
-      # ============================================
+        required: true 
 
-      - name: Load Config Variables
-        run: |
+        default: "Integration Flow" 
 
-          CONFIG_FILE=".github/config/cpi-config.env"
+        type: choice 
 
-          echo "📦 Loading configuration from $CONFIG_FILE"
+        options: 
 
-          if [ ! -f "$CONFIG_FILE" ]; then
+          - Integration Flow 
 
-            echo "❌ Config file not found"
+          - Value Mapping 
 
-            exit 1
+          - Message Mapping 
 
-          fi
+          - Script Collection 
 
-          while IFS='=' read -r key value; do
+          - All 
 
-            if [[ ! "$key" =~ ^# ]] && [[ -n "$key" ]]; then
+ 
 
-              echo "$key=$value" >> $GITHUB_ENV
+      SYNC_MODE: 
 
-            fi
+        description: "Sync Mode (Required only if ARTIFACT_TYPE is not 'All')" 
 
-          done < "$CONFIG_FILE"
+        required: true 
 
-      # ============================================
-      # INSTALL REQUIRED TOOLS
-      # ============================================
+        default: "ALL" 
 
-      - name: Install Required Packages
-        run: |
+        type: choice 
 
-          sudo apt-get update
+        options: 
 
-          sudo apt-get install -y jq unzip
+          - ALL 
 
-      # ============================================
-      # FETCH AND PROCESS CPI ARTIFACTS
-      # ============================================
+          - SINGLE 
 
-      - name: Fetch and Process CPI Artifacts
+ 
 
-        env:
-          CLIENT_ID: ${{ secrets.CLIENT_ID }}
-          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
-          AUTH_URL: ${{ secrets.AUTH_URL }}
+      ARTIFACT_ID: 
 
-        run: |
+        description: "Artifact ID (Required only if SYNC_MODE is SINGLE)" 
 
-          set -e
+        required: false 
 
-          PACKAGE_ID="${{ github.event.inputs.PACKAGE_ID }}"
-          ARTIFACT_TYPE="${{ github.event.inputs.ARTIFACT_TYPE }}"
-          SYNC_MODE="${{ github.event.inputs.SYNC_MODE }}"
-          ARTIFACT_ID_INPUT="${{ github.event.inputs.ARTIFACT_ID }}"
-          BRANCH_NAME="${{ github.event.inputs.BRANCH_NAME }}"
+        type: string 
 
-          # ============================================
-          # URL ENCODE PACKAGE ID
-          # ============================================
+ 
 
-          ENCODED_PACKAGE_ID=$(printf '%s' "$PACKAGE_ID" | sed 's/ /%20/g')
+      BRANCH_NAME: 
 
-          # ============================================
-          # VALIDATE INPUT COMBINATIONS
-          # ============================================
+        description: "Target Git Branch" 
 
-          if [ "$ARTIFACT_TYPE" = "All" ] && \
-             [ "$SYNC_MODE" = "SINGLE" ]; then
+        required: true 
 
-            echo "❌ Invalid selection"
+        type: string 
 
-            echo "ℹ️ ARTIFACT_TYPE=All supports only SYNC_MODE=ALL"
+ 
 
-            exit 1
+permissions: 
 
-          fi
+  contents: write 
 
-          # ============================================
-          # VALIDATE SINGLE MODE INPUT
-          # ============================================
+ 
 
-          if [ "$SYNC_MODE" = "SINGLE" ] && \
-             [ -z "$ARTIFACT_ID_INPUT" ]; then
+jobs: 
 
-            echo "❌ ARTIFACT_ID is required for SINGLE mode"
+  sync-artifacts: 
 
-            exit 1
+    runs-on: ubuntu-latest 
 
-          fi
+ 
 
-          # ============================================
-          # VALIDATE ARTIFACT TYPE
-          # ============================================
+    steps: 
 
-          case "$ARTIFACT_TYPE" in
+ 
 
-            "Integration Flow"|"Value Mapping"|"Message Mapping"|"Script Collection"|"All")
+      # ============================================ 
 
-              echo "✅ Valid artifact type"
+      # CHECKOUT REPOSITORY 
 
-              ;;
+      # ============================================ 
 
-            *)
+ 
 
-              echo "❌ Invalid artifact type: ${ARTIFACT_TYPE}"
+      - name: Checkout Repository 
 
-              exit 1
+        uses: actions/checkout@v4 
 
-              ;;
+        with: 
 
-          esac
+          fetch-depth: 0 
 
-          # ============================================
-          # VALIDATE TARGET BRANCH EXISTS
-          # ============================================
+ 
 
-          echo "🔍 Validating target branch: ${BRANCH_NAME}"
+      # ============================================ 
 
-          if git ls-remote --exit-code --heads origin "${BRANCH_NAME}" > /dev/null; then
+      # LOAD CONFIG VARIABLES 
 
-            echo "✅ Branch exists: ${BRANCH_NAME}"
+      # ============================================ 
 
-          else
+ 
 
-            echo "❌ Target branch not found: ${BRANCH_NAME}"
+      - name: Load Config Variables 
 
-            exit 1
+        run: | 
 
-          fi
+ 
 
-          # ============================================
-          # CHECKOUT TARGET BRANCH
-          # ============================================
+          CONFIG_FILE=".github/config/cpi-config.env" 
 
-          echo "📂 Checking out branch: ${BRANCH_NAME}"
+ 
 
-          git checkout "${BRANCH_NAME}"
+          echo " Loading configuration from $CONFIG_FILE" 
 
-          TMP_DIR="/tmp/cpi_sync_$(date +%s)"
+ 
 
-          mkdir -p "$TMP_DIR"
+          if [ ! -f "$CONFIG_FILE" ]; then 
 
-          # ============================================
-          # FETCH OAUTH TOKEN
-          # ============================================
+ 
 
-          echo "🔑 Fetching OAuth token from SAP CPI..."
+            echo " Config file not found" 
 
-          TOKEN_RESPONSE=$(curl -s -X POST "$AUTH_URL" \
-            -u "$CLIENT_ID:$CLIENT_SECRET" \
-            -d "grant_type=client_credentials&response_type=token")
+ 
 
-          ACCESS_TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r '.access_token')
+            exit 1 
 
-          if [ -z "$ACCESS_TOKEN" ] || \
-             [ "$ACCESS_TOKEN" == "null" ]; then
+ 
 
-            echo "❌ Failed to fetch access token"
+          fi 
 
-            echo "$TOKEN_RESPONSE"
+ 
 
-            exit 1
+          while IFS='=' read -r key value; do 
 
-          fi
+ 
 
-          echo "✅ OAuth token fetched successfully"
+            if [[ ! "$key" =~ ^# ]] && [[ -n "$key" ]]; then 
 
-          # ============================================
-          # VALIDATE PACKAGE EXISTS
-          # ============================================
+ 
 
-          echo "🔍 Validating package: ${PACKAGE_ID}"
+              echo "$key=$value" >> $GITHUB_ENV 
 
-          PACKAGE_STATUS=$(curl -s \
-            -o /dev/null \
-            -w "%{http_code}" \
-            -X GET \
-            "${CPI_TMN_HOST}/api/v1/IntegrationPackages('${ENCODED_PACKAGE_ID}')" \
-            -H "Authorization: Bearer $ACCESS_TOKEN" \
-            -H "Accept: application/json")
+ 
 
-          if [ "$PACKAGE_STATUS" -ne 200 ]; then
+            fi 
 
-            echo "❌ Package not found: ${PACKAGE_ID}"
+ 
 
-            exit 1
+          done < "$CONFIG_FILE" 
 
-          fi
+ 
 
-          echo "✅ Package exists"
+      # ============================================ 
 
-          PACKAGE_ROOT="${{ github.workspace }}/${PACKAGE_ID}"
+      # INSTALL REQUIRED TOOLS 
 
-          mkdir -p "$PACKAGE_ROOT"
+      # ============================================ 
 
-          # ============================================
-          # FUNCTION TO PROCESS ARTIFACT TYPE
-          # ============================================
+ 
 
-          process_artifact_type () {
+      - name: Install Required Packages 
 
-            ARTIFACT_FOLDER=$1
-            API_ENTITY=$2
+        run: | 
 
-            echo "--------------------------------------------"
+ 
 
-            echo "📦 Processing Artifact Type: $ARTIFACT_FOLDER"
+          sudo apt-get update 
 
-            API_URL="${CPI_TMN_HOST}/api/v1/IntegrationPackages('${ENCODED_PACKAGE_ID}')/${API_ENTITY}"
+ 
 
-            ARTIFACTS_JSON=$(curl -s -X GET "$API_URL" \
-              -H "Authorization: Bearer $ACCESS_TOKEN" \
-              -H "Accept: application/json" \
-              -H "Cache-Control: no-cache")
+          sudo apt-get install -y jq unzip 
 
-            TARGET_DIR="${PACKAGE_ROOT}/${ARTIFACT_FOLDER}"
+ 
 
-            mkdir -p "$TARGET_DIR"
+      # ============================================ 
 
-            ARTIFACT_IDS=$(echo "$ARTIFACTS_JSON" | jq -r '.d.results[]?.Id')
+      # FETCH AND PROCESS CPI ARTIFACTS 
 
-            # ============================================
-            # EMPTY ARTIFACT TYPE
-            # ============================================
+      # ============================================ 
 
-            if [ -z "$ARTIFACT_IDS" ]; then
+ 
 
-              echo "⚠️ No ${ARTIFACT_FOLDER} artifacts found."
+      - name: Fetch and Process CPI Artifacts 
 
-              touch "${TARGET_DIR}/.gitkeep"
+ 
 
-              return
+        env: 
 
-            fi
+          CLIENT_ID: ${{ secrets.CLIENT_ID }} 
 
-            FOUND_SINGLE_ARTIFACT=false
+          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }} 
 
-            # ============================================
-            # PROCESS EACH ARTIFACT
-            # ============================================
+          AUTH_URL: ${{ secrets.AUTH_URL }} 
 
-            for ARTIFACT_ID in $ARTIFACT_IDS; do
+          CPI_TMN_HOST: ${{ secrets.CPI_TMN_HOST }} 
 
-              # ============================================
-              # SINGLE ARTIFACT FILTER
-              # ============================================
+ 
 
-              if [ "$SYNC_MODE" = "SINGLE" ] && \
-                 [ "$ARTIFACT_ID" != "$ARTIFACT_ID_INPUT" ]; then
+        run: | 
 
-                echo "⏭️ Skipping artifact: $ARTIFACT_ID"
+ 
 
-                continue
+          set -e 
 
-              fi
+ 
 
-              FOUND_SINGLE_ARTIFACT=true
+          PACKAGE_ID="${{ github.event.inputs.PACKAGE_ID }}" 
 
-              echo "📥 Processing ${ARTIFACT_FOLDER}: $ARTIFACT_ID"
+          ARTIFACT_TYPE="${{ github.event.inputs.ARTIFACT_TYPE }}" 
 
-              ARTIFACT_GIT_DIR="${TARGET_DIR}/${ARTIFACT_ID}"
+          SYNC_MODE="${{ github.event.inputs.SYNC_MODE }}" 
 
-              rm -rf "$ARTIFACT_GIT_DIR"
+          ARTIFACT_ID_INPUT="${{ github.event.inputs.ARTIFACT_ID }}" 
 
-              mkdir -p "$ARTIFACT_GIT_DIR"
+          BRANCH_NAME="${{ github.event.inputs.BRANCH_NAME }}" 
 
-              # ============================================
-              # TRY DRAFT VERSION FIRST
-              # ============================================
+ 
 
-              echo "🔍 Checking DRAFT version for $ARTIFACT_ID..."
+          # ============================================ 
 
-              DOWNLOAD_URL="${CPI_TMN_HOST}/api/v1/${API_ENTITY}(Id='$ARTIFACT_ID',Version='draft')/\$value"
+          # URL ENCODE PACKAGE ID 
 
-              HTTP_STATUS=$(curl -s \
-                -o "$TMP_DIR/$ARTIFACT_ID.zip" \
-                -w "%{http_code}" \
-                -X GET "$DOWNLOAD_URL" \
-                -H "Authorization: Bearer $ACCESS_TOKEN" \
-                -H "Cache-Control: no-cache")
+          # ============================================ 
 
-              ARTIFACT_VERSION="draft"
+ 
 
-              # ============================================
-              # FALLBACK TO ACTIVE VERSION
-              # ============================================
+          ENCODED_PACKAGE_ID=$(printf '%s' "$PACKAGE_ID" | sed 's/ /%20/g') 
 
-              if [ "$HTTP_STATUS" -ne 200 ]; then
+ 
 
-                echo "ℹ️ Draft version not found"
+          # ============================================ 
 
-                echo "🔍 Checking ACTIVE version..."
+          # VALIDATE INPUT COMBINATIONS 
 
-                DOWNLOAD_URL="${CPI_TMN_HOST}/api/v1/${API_ENTITY}(Id='$ARTIFACT_ID',Version='active')/\$value"
+          # ============================================ 
 
-                HTTP_STATUS=$(curl -s \
-                  -o "$TMP_DIR/$ARTIFACT_ID.zip" \
-                  -w "%{http_code}" \
-                  -X GET "$DOWNLOAD_URL" \
-                  -H "Authorization: Bearer $ACCESS_TOKEN" \
-                  -H "Cache-Control: no-cache")
+ 
 
-                ARTIFACT_VERSION="active"
+          if [ "$ARTIFACT_TYPE" = "All" ] && \ 
 
-              fi
+             [ "$SYNC_MODE" = "SINGLE" ]; then 
 
-              # ============================================
-              # FINAL FAILURE
-              # ============================================
+ 
 
-              if [ "$HTTP_STATUS" -ne 200 ]; then
+            echo " Invalid selection" 
 
-                echo "❌ Failed to fetch artifact: $ARTIFACT_ID"
+ 
 
-                echo "ℹ️ Neither draft nor active version exists"
+            echo "ARTIFACT_TYPE=All supports only SYNC_MODE=ALL" 
 
-                rm -rf "$ARTIFACT_GIT_DIR"
+ 
 
-                continue
+            exit 1 
 
-              fi
+ 
 
-              echo "✅ Found ${ARTIFACT_VERSION} version"
+          fi 
 
-              # ============================================
-              # UNZIP ARTIFACT
-              # ============================================
+ 
 
-              if [ -f "$TMP_DIR/$ARTIFACT_ID.zip" ] && \
-                 [ -s "$TMP_DIR/$ARTIFACT_ID.zip" ]; then
+          # ============================================ 
 
-                unzip -q -o "$TMP_DIR/$ARTIFACT_ID.zip" \
-                  -d "$ARTIFACT_GIT_DIR"
+          # VALIDATE SINGLE MODE INPUT 
 
-                echo "✅ Successfully synced ${ARTIFACT_FOLDER}: $ARTIFACT_ID"
+          # ============================================ 
 
-              else
+ 
 
-                echo "❌ ZIP file invalid for $ARTIFACT_ID"
+          if [ "$SYNC_MODE" = "SINGLE" ] && \ 
 
-                rm -rf "$ARTIFACT_GIT_DIR"
+             [ -z "$ARTIFACT_ID_INPUT" ]; then 
 
-              fi
+ 
 
-            done
+            echo "ARTIFACT_ID is required for SINGLE mode" 
 
-            # ============================================
-            # SINGLE ARTIFACT VALIDATION
-            # ============================================
+ 
 
-            if [ "$SYNC_MODE" = "SINGLE" ] && \
-               [ "$FOUND_SINGLE_ARTIFACT" = false ]; then
+            exit 1 
 
-              echo "❌ Artifact not found: ${ARTIFACT_ID_INPUT}"
+ 
 
-              exit 1
+          fi 
 
-            fi
-          }
+ 
 
-          # ============================================
-          # PROCESS SELECTED ARTIFACT TYPE
-          # ============================================
+          # ============================================ 
 
-          echo "📦 Selected Artifact Type: $ARTIFACT_TYPE"
+          # VALIDATE ARTIFACT TYPE 
 
-          if [ "$ARTIFACT_TYPE" = "Integration Flow" ]; then
+          # ============================================ 
 
-            process_artifact_type \
-              "IntegrationFlow" \
-              "IntegrationDesigntimeArtifacts"
+ 
 
-          elif [ "$ARTIFACT_TYPE" = "Script Collection" ]; then
+          case "$ARTIFACT_TYPE" in 
 
-            process_artifact_type \
-              "ScriptCollection" \
-              "ScriptCollectionDesigntimeArtifacts"
+ 
 
-          elif [ "$ARTIFACT_TYPE" = "Value Mapping" ]; then
+            "Integration Flow"|"Value Mapping"|"Message Mapping"|"Script Collection"|"All") 
 
-            process_artifact_type \
-              "ValueMapping" \
-              "ValueMappingDesigntimeArtifacts"
+ 
 
-          elif [ "$ARTIFACT_TYPE" = "Message Mapping" ]; then
+              echo " Valid artifact type" 
 
-            process_artifact_type \
-              "MessageMapping" \
-              "MessageMappingDesigntimeArtifacts"
+ 
 
-          elif [ "$ARTIFACT_TYPE" = "All" ]; then
+              ;; 
 
-            process_artifact_type \
-              "IntegrationFlow" \
-              "IntegrationDesigntimeArtifacts"
+ 
 
-            process_artifact_type \
-              "ScriptCollection" \
-              "ScriptCollectionDesigntimeArtifacts"
+            *) 
 
-            process_artifact_type \
-              "ValueMapping" \
-              "ValueMappingDesigntimeArtifacts"
+ 
 
-            process_artifact_type \
-              "MessageMapping" \
-              "MessageMappingDesigntimeArtifacts"
+              echo " Invalid artifact type: ${ARTIFACT_TYPE}" 
 
-          else
+ 
 
-            echo "❌ Invalid ARTIFACT_TYPE"
+              exit 1 
 
-            exit 1
+ 
 
-          fi
+              ;; 
 
-          # ============================================
-          # CLEANUP
-          # ============================================
+ 
 
-          rm -rf "$TMP_DIR"
+          esac 
 
-      # ============================================
-      # COMMIT AND PUSH
-      # ============================================
+ 
 
-      - name: Commit and Push Changes
-        run: |
+          # ============================================ 
 
-          PACKAGE_ID="${{ github.event.inputs.PACKAGE_ID }}"
-          BRANCH_NAME="${{ github.event.inputs.BRANCH_NAME }}"
+          # VALIDATE TARGET BRANCH EXISTS 
 
-          git config --global user.name "github-actions[bot]"
+          # ============================================ 
 
-          git config --global user.email \
-            "github-actions[bot]@users.noreply.github.com"
+ 
 
-          echo "📋 Git Status"
+          echo " Validating target branch: ${BRANCH_NAME}" 
 
-          git status
+ 
 
-          git add -A "${PACKAGE_ID}/"
+          if git ls-remote --exit-code --heads origin "${BRANCH_NAME}" > /dev/null; then 
 
-          if [[ -n $(git status --porcelain) ]]; then
+ 
 
-            echo "✅ Changes detected"
+            echo " Branch exists: ${BRANCH_NAME}" 
 
-            git commit -m \
-              "Auto-sync CPI Package: ${PACKAGE_ID} (${GITHUB_RUN_NUMBER})"
+ 
 
-            echo "📤 Pushing updates to GitHub..."
+          else 
 
-            git push origin "${BRANCH_NAME}"
+ 
 
-            echo "✅ Sync completed successfully"
+            echo " Target branch not found: ${BRANCH_NAME}" 
 
-          else
+ 
 
-            echo "ℹ️ No changes detected."
+            exit 1 
 
-          fi
+ 
+
+          fi 
+
+ 
+
+          # ============================================ 
+
+          # CHECKOUT TARGET BRANCH 
+
+          # ============================================ 
+
+ 
+
+          echo " Checking out branch: ${BRANCH_NAME}" 
+
+ 
+
+          git checkout "${BRANCH_NAME}" 
+
+ 
+
+          TMP_DIR="/tmp/cpi_sync_$(date +%s)" 
+
+ 
+
+          mkdir -p "$TMP_DIR" 
+
+ 
+
+          # ============================================ 
+
+          # FETCH OAUTH TOKEN 
+
+          # ============================================ 
+
+ 
+
+          echo " Fetching OAuth token from SAP CPI..." 
+
+ 
+
+          TOKEN_RESPONSE=$(curl -s -X POST "$AUTH_URL" \ 
+
+            -u "$CLIENT_ID:$CLIENT_SECRET" \ 
+
+            -d "grant_type=client_credentials&response_type=token") 
+
+ 
+
+          ACCESS_TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r '.access_token') 
+
+ 
+
+          if [ -z "$ACCESS_TOKEN" ] || \ 
+
+             [ "$ACCESS_TOKEN" == "null" ]; then 
+
+ 
+
+            echo " Failed to fetch access token" 
+
+ 
+
+            echo "$TOKEN_RESPONSE" 
+
+ 
+
+            exit 1 
+
+ 
+
+          fi 
+
+ 
+
+          echo " OAuth token fetched successfully" 
+
+ 
+
+          # ============================================ 
+
+          # VALIDATE PACKAGE EXISTS 
+
+          # ============================================ 
+
+ 
+
+          echo " Validating package: ${PACKAGE_ID}" 
+
+ 
+
+          PACKAGE_STATUS=$(curl -s \ 
+
+            -o /dev/null \ 
+
+            -w "%{http_code}" \ 
+
+            -X GET \ 
+
+            "${CPI_TMN_HOST}/api/v1/IntegrationPackages('${ENCODED_PACKAGE_ID}')" \ 
+
+            -H "Authorization: Bearer $ACCESS_TOKEN" \ 
+
+            -H "Accept: application/json") 
+
+ 
+
+          if [ "$PACKAGE_STATUS" -ne 200 ]; then 
+
+ 
+
+            echo " Package not found: ${PACKAGE_ID}" 
+
+ 
+
+            exit 1 
+
+ 
+
+          fi 
+
+ 
+
+          echo " Package exists" 
+
+ 
+
+          PACKAGE_ROOT="${{ github.workspace }}/${PACKAGE_ID}" 
+
+ 
+
+          mkdir -p "$PACKAGE_ROOT" 
+
+ 
+
+          # ============================================ 
+
+          # FUNCTION TO PROCESS ARTIFACT TYPE 
+
+          # ============================================ 
+
+ 
+
+          process_artifact_type () { 
+
+ 
+
+            ARTIFACT_FOLDER=$1 
+
+            API_ENTITY=$2 
+
+ 
+
+            echo "--------------------------------------------" 
+
+ 
+
+            echo " Processing Artifact Type: $ARTIFACT_FOLDER" 
+
+ 
+
+            API_URL="${CPI_TMN_HOST}/api/v1/IntegrationPackages('${ENCODED_PACKAGE_ID}')/${API_ENTITY}" 
+
+ 
+
+            ARTIFACTS_JSON=$(curl -s -X GET "$API_URL" \ 
+
+              -H "Authorization: Bearer $ACCESS_TOKEN" \ 
+
+              -H "Accept: application/json" \ 
+
+              -H "Cache-Control: no-cache") 
+
+ 
+
+            TARGET_DIR="${PACKAGE_ROOT}/${ARTIFACT_FOLDER}" 
+
+ 
+
+            mkdir -p "$TARGET_DIR" 
+
+ 
+
+            ARTIFACT_IDS=$(echo "$ARTIFACTS_JSON" | jq -r '.d.results[]?.Id') 
+
+ 
+
+            # ============================================ 
+
+            # EMPTY ARTIFACT TYPE 
+
+            # ============================================ 
+
+ 
+
+            if [ -z "$ARTIFACT_IDS" ]; then 
+
+ 
+
+              echo " No ${ARTIFACT_FOLDER} artifacts found." 
+
+ 
+
+              touch "${TARGET_DIR}/.gitkeep" 
+
+ 
+
+              return 
+
+ 
+
+            fi 
+
+ 
+
+            FOUND_SINGLE_ARTIFACT=false 
+
+ 
+
+            # ============================================ 
+
+            # PROCESS EACH ARTIFACT 
+
+            # ============================================ 
+
+ 
+
+            for ARTIFACT_ID in $ARTIFACT_IDS; do 
+
+ 
+
+              # ============================================ 
+
+              # SINGLE ARTIFACT FILTER 
+
+              # ============================================ 
+
+ 
+
+              if [ "$SYNC_MODE" = "SINGLE" ] && \ 
+
+                 [ "$ARTIFACT_ID" != "$ARTIFACT_ID_INPUT" ]; then 
+
+ 
+
+                echo " Skipping artifact: $ARTIFACT_ID" 
+
+ 
+
+                continue 
+
+ 
+
+              fi 
+
+ 
+
+              FOUND_SINGLE_ARTIFACT=true 
+
+ 
+
+              echo " Processing ${ARTIFACT_FOLDER}: $ARTIFACT_ID" 
+
+ 
+
+              ARTIFACT_GIT_DIR="${TARGET_DIR}/${ARTIFACT_ID}" 
+
+ 
+
+              rm -rf "$ARTIFACT_GIT_DIR" 
+
+ 
+
+              mkdir -p "$ARTIFACT_GIT_DIR" 
+
+ 
+
+              # ============================================ 
+
+              # TRY DRAFT VERSION FIRST 
+
+              # ============================================ 
+
+ 
+
+              echo " Checking DRAFT version for $ARTIFACT_ID..." 
+
+ 
+
+              DOWNLOAD_URL="${CPI_TMN_HOST}/api/v1/${API_ENTITY}(Id='$ARTIFACT_ID',Version='draft')/\$value" 
+
+ 
+
+              HTTP_STATUS=$(curl -s \ 
+
+                -o "$TMP_DIR/$ARTIFACT_ID.zip" \ 
+
+                -w "%{http_code}" \ 
+
+                -X GET "$DOWNLOAD_URL" \ 
+
+                -H "Authorization: Bearer $ACCESS_TOKEN" \ 
+
+                -H "Cache-Control: no-cache") 
+
+ 
+
+              ARTIFACT_VERSION="draft" 
+
+ 
+
+              # ============================================ 
+
+              # FALLBACK TO ACTIVE VERSION 
+
+              # ============================================ 
+
+ 
+
+              if [ "$HTTP_STATUS" -ne 200 ]; then 
+
+ 
+
+                echo " Draft version not found" 
+
+ 
+
+                echo " Checking ACTIVE version..." 
+
+ 
+
+                DOWNLOAD_URL="${CPI_TMN_HOST}/api/v1/${API_ENTITY}(Id='$ARTIFACT_ID',Version='active')/\$value" 
+
+ 
+
+                HTTP_STATUS=$(curl -s \ 
+
+                  -o "$TMP_DIR/$ARTIFACT_ID.zip" \ 
+
+                  -w "%{http_code}" \ 
+
+                  -X GET "$DOWNLOAD_URL" \ 
+
+                  -H "Authorization: Bearer $ACCESS_TOKEN" \ 
+
+                  -H "Cache-Control: no-cache") 
+
+ 
+
+                ARTIFACT_VERSION="active" 
+
+ 
+
+              fi 
+
+ 
+
+              # ============================================ 
+
+              # FINAL FAILURE 
+
+              # ============================================ 
+
+ 
+
+              if [ "$HTTP_STATUS" -ne 200 ]; then 
+
+ 
+
+                echo " Failed to fetch artifact: $ARTIFACT_ID" 
+
+ 
+
+                echo " Neither draft nor active version exists" 
+
+ 
+
+                rm -rf "$ARTIFACT_GIT_DIR" 
+
+ 
+
+                continue 
+
+ 
+
+              fi 
+
+ 
+
+              echo " Found ${ARTIFACT_VERSION} version" 
+
+ 
+
+              # ============================================ 
+
+              # UNZIP ARTIFACT 
+
+              # ============================================ 
+
+ 
+
+              if [ -f "$TMP_DIR/$ARTIFACT_ID.zip" ] && \ 
+
+                 [ -s "$TMP_DIR/$ARTIFACT_ID.zip" ]; then 
+
+ 
+
+                unzip -q -o "$TMP_DIR/$ARTIFACT_ID.zip" \ 
+
+                  -d "$ARTIFACT_GIT_DIR" 
+
+ 
+
+                echo " Successfully synced ${ARTIFACT_FOLDER}: $ARTIFACT_ID" 
+
+ 
+
+              else 
+
+ 
+
+                echo " ZIP file invalid for $ARTIFACT_ID" 
+
+ 
+
+                rm -rf "$ARTIFACT_GIT_DIR" 
+
+ 
+
+              fi 
+
+ 
+
+            done 
+
+ 
+
+            # ============================================ 
+
+            # SINGLE ARTIFACT VALIDATION 
+
+            # ============================================ 
+
+ 
+
+            if [ "$SYNC_MODE" = "SINGLE" ] && \ 
+
+               [ "$FOUND_SINGLE_ARTIFACT" = false ]; then 
+
+ 
+
+              echo "Artifact not found: ${ARTIFACT_ID_INPUT}" 
+
+ 
+
+              exit 1 
+
+ 
+
+            fi 
+
+          } 
+
+ 
+
+          # ============================================ 
+
+          # PROCESS SELECTED ARTIFACT TYPE 
+
+          # ============================================ 
+
+ 
+
+          echo " Selected Artifact Type: $ARTIFACT_TYPE" 
+
+ 
+
+          if [ "$ARTIFACT_TYPE" = "Integration Flow" ]; then 
+
+ 
+
+            process_artifact_type \ 
+
+              "IntegrationFlow" \ 
+
+              "IntegrationDesigntimeArtifacts" 
+
+ 
+
+          elif [ "$ARTIFACT_TYPE" = "Script Collection" ]; then 
+
+ 
+
+            process_artifact_type \ 
+
+              "ScriptCollection" \ 
+
+              "ScriptCollectionDesigntimeArtifacts" 
+
+ 
+
+          elif [ "$ARTIFACT_TYPE" = "Value Mapping" ]; then 
+
+ 
+
+            process_artifact_type \ 
+
+              "ValueMapping" \ 
+
+              "ValueMappingDesigntimeArtifacts" 
+
+ 
+
+          elif [ "$ARTIFACT_TYPE" = "Message Mapping" ]; then 
+
+ 
+
+            process_artifact_type \ 
+
+              "MessageMapping" \ 
+
+              "MessageMappingDesigntimeArtifacts" 
+
+ 
+
+          elif [ "$ARTIFACT_TYPE" = "All" ]; then 
+
+ 
+
+            process_artifact_type \ 
+
+              "IntegrationFlow" \ 
+
+              "IntegrationDesigntimeArtifacts" 
+
+ 
+
+            process_artifact_type \ 
+
+              "ScriptCollection" \ 
+
+              "ScriptCollectionDesigntimeArtifacts" 
+
+ 
+
+            process_artifact_type \ 
+
+              "ValueMapping" \ 
+
+              "ValueMappingDesigntimeArtifacts" 
+
+ 
+
+            process_artifact_type \ 
+
+              "MessageMapping" \ 
+
+              "MessageMappingDesigntimeArtifacts" 
+
+ 
+
+          else 
+
+ 
+
+            echo " Invalid ARTIFACT_TYPE" 
+
+ 
+
+            exit 1 
+
+ 
+
+          fi 
+
+ 
+
+          # ============================================ 
+
+          # CLEANUP 
+
+          # ============================================ 
+
+ 
+
+          rm -rf "$TMP_DIR" 
+
+ 
+
+      # ============================================ 
+
+      # COMMIT AND PUSH 
+
+      # ============================================ 
+
+ 
+
+      - name: Commit and Push Changes 
+
+        run: | 
+
+ 
+
+          PACKAGE_ID="${{ github.event.inputs.PACKAGE_ID }}" 
+
+          BRANCH_NAME="${{ github.event.inputs.BRANCH_NAME }}" 
+
+ 
+
+          git config --global user.name "github-actions[bot]" 
+
+ 
+
+          git config --global user.email \ 
+
+            "github-actions[bot]@users.noreply.github.com" 
+
+ 
+
+          echo " Git Status" 
+
+ 
+
+          git status 
+
+ 
+
+          git add -A "${PACKAGE_ID}/" 
+
+ 
+
+          if [[ -n $(git status --porcelain) ]]; then 
+
+ 
+
+            echo " Changes detected" 
+
+ 
+
+            git commit -m \ 
+
+              "Auto-sync CPI Package: ${PACKAGE_ID} (${GITHUB_RUN_NUMBER})" 
+
+ 
+
+            echo " Pushing updates to GitHub..." 
+
+ 
+
+            git push origin "${BRANCH_NAME}" 
+
+ 
+
+            echo " Sync completed successfully" 
+
+ 
+
+          else 
+
+ 
+
+            echo " No changes detected." 
+
+ 
+
+          fi 
