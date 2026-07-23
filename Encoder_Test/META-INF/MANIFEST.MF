@@ -1,6 +1,6 @@
 Manifest-Version: 1.0
 Bundle-ManifestVersion: 2
-Bundle-Name: Encoder_Test
+Bundle-Name: Encoder_Test1
 Bundle-SymbolicName: Encoder_Test; singleton:=true
 Bundle-Version: 1.0.4
 SAP-BundleType: IntegrationFlow
